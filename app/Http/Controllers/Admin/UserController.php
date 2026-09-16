@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\Department;
 use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\User;
@@ -23,6 +24,7 @@ class UserController extends Controller
         $search = trim((string) $request->input('q'));
         $role = $request->input('role');
         $status = $request->input('status');
+        $department = $request->input('department');
 
         $query->when($search !== '', fn ($users) => $users->where(function ($users) use ($search) {
             $users->where('name', 'like', "%{$search}%")
@@ -33,10 +35,11 @@ class UserController extends Controller
         $query->when($status === 'active', fn ($users) => $users->where('is_active', true));
         $query->when($status === 'inactive', fn ($users) => $users->where('is_active', false));
         $query->when($status === 'locked', fn ($users) => $users->whereNotNull('locked_until')->where('locked_until', '>', now()));
+        $query->when(Department::tryFrom((string) $department), fn ($users, $dept) => $users->department($dept));
 
         return view('admin.users.index', [
             'users' => $query->paginate(20)->withQueryString(),
-            'filters' => compact('search', 'role', 'status'),
+            'filters' => compact('search', 'role', 'status', 'department'),
         ]);
     }
 
@@ -145,7 +148,7 @@ class UserController extends Controller
             'username' => ['required', 'string', 'max:50', 'regex:/^[A-Za-z0-9._-]+$/', Rule::unique('users', 'username')->ignore($user)],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user)],
             'job_title' => ['nullable', 'string', 'max:255'],
-            'department' => ['nullable', 'string', 'max:255'],
+            'department' => ['required', Rule::enum(Department::class)],
             'avatar_color' => ['required', 'string', 'in:'.implode(',', User::AVATAR_COLORS)],
             'role_id' => ['required', 'integer', Rule::exists('roles', 'id')],
         ];

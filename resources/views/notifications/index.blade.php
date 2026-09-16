@@ -1,17 +1,15 @@
 <x-layouts.app title="Notifications">
     <div class="space-y-6">
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-                <h1 class="text-2xl font-bold tracking-tight text-slate-900">Notifications</h1>
-                <p class="mt-1 text-sm text-slate-500">Updates about your tasks and projects.</p>
-            </div>
+        <x-page-header title="Notifications" description="Updates about your tasks and projects." class="mb-0">
             @if (auth()->user()->unreadNotifications()->exists())
-                <form method="POST" action="{{ route('notifications.read-all') }}">
-                    @csrf
-                    <button class="btn-secondary btn-sm" type="submit"><x-icon name="check" class="h-4 w-4" /> Mark all read</button>
-                </form>
+                <x-slot:actions>
+                    <form method="POST" action="{{ route('notifications.read-all') }}">
+                        @csrf
+                        <button class="btn-secondary" type="submit"><x-icon name="check" class="h-4 w-4" /> Mark all read</button>
+                    </form>
+                </x-slot:actions>
             @endif
-        </div>
+        </x-page-header>
 
         <div class="card divide-y divide-slate-100">
             @forelse ($notifications as $notification)

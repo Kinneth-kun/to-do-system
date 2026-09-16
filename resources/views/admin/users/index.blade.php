@@ -6,10 +6,11 @@
     </x-page-header>
 
     <form method="GET" action="{{ route('admin.users.index') }}" class="card mb-6">
-        <div class="card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_12rem_12rem_auto] lg:items-end">
+        <div class="card-body grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_11rem_11rem_13rem_auto] lg:items-end">
             <x-form.input name="q" label="Search" :value="$filters['search']" placeholder="Name, username, or email" />
             <x-form.select name="role" label="Role" :options="['admin' => 'Administrator', 'user' => 'User']" :value="$filters['role']" placeholder="All roles" />
             <x-form.select name="status" label="Status" :options="['active' => 'Active', 'inactive' => 'Inactive', 'locked' => 'Locked']" :value="$filters['status']" placeholder="All statuses" />
+            <x-form.select name="department" label="Department" :options="\App\Enums\Department::options()" :value="$filters['department'] ?? null" placeholder="All departments" />
             <div class="flex gap-2">
                 <button type="submit" class="btn-secondary"><x-icon name="search" class="h-4 w-4" /> Filter</button>
                 <a href="{{ route('admin.users.index') }}" class="btn-ghost">Clear</a>
@@ -23,6 +24,7 @@
                 <thead>
                     <tr>
                         <th>User</th>
+                        <th>Department</th>
                         <th>Role</th>
                         <th>Status</th>
                         <th class="hidden lg:table-cell">Last sign in</th>
@@ -40,6 +42,15 @@
                                         <div class="truncate text-xs text-slate-500">{{ '@'.$user->username }} · {{ $user->email }}</div>
                                     </div>
                                 </div>
+                            </td>
+                            <td>
+                                @if ($user->department)
+                                    <a href="{{ route('tasks.index', ['department' => $user->department->value]) }}" title="See this department's tasks">
+                                        <x-department-badge :department="$user->department" size="sm" />
+                                    </a>
+                                @else
+                                    <span class="text-xs text-slate-400">—</span>
+                                @endif
                             </td>
                             <td><span class="chip">{{ $user->role?->label }}</span></td>
                             <td>

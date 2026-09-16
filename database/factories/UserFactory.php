@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\Department;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -30,12 +31,17 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'job_title' => fake()->randomElement(['Engineer', 'Designer', 'Analyst', 'Coordinator', 'Specialist', 'Officer']),
-            'department' => fake()->randomElement(['Operations', 'Engineering', 'Finance', 'Marketing', 'HR']),
+            'department' => fake()->randomElement(Department::cases()),
             'is_active' => true,
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
+    }
+
+    public function inDepartment(Department $department): static
+    {
+        return $this->state(fn () => ['department' => $department]);
     }
 
     public function admin(): static

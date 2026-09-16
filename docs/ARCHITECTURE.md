@@ -7,7 +7,8 @@ Run locally:
 
 ```bash
 composer install && npm install
-php artisan migrate:fresh --seed     # admin@taskflow.test / password  (+ maria, james, aisha, daniel, sofia, liam, grace @taskflow.test)
+php artisan migrate:fresh --seed     # roles + one administrator, read from ADMIN_* in your .env
+php artisan db:seed --class=DemoDataSeeder   # optional: sample people, projects and history
 npm run build                        # or: npm run dev
 php artisan serve
 ```
@@ -19,7 +20,7 @@ php artisan serve
 | Area | Files |
 |---|---|
 | Schema | `database/migrations/*` — roles, users, projects, project_members, tasks, task_collaborators, task_updates, task_comments, attachments, notifications, activity_logs, settings |
-| Enums | `app/Enums/` — `TaskStatus`, `Priority`, `ProjectStatus`, `ProjectHealth`, `ProjectMemberRole`, `TaskUpdateType`, `NotificationType` (all have `label()`, most have `color()` and `options()`) |
+| Enums | `app/Enums/` — `TaskStatus`, `Priority`, `ProjectStatus`, `ProjectHealth`, `ProjectMemberRole`, `TaskUpdateType`, `NotificationType`, `Department` (all have `label()`, most have `color()` and `options()`) |
 | Models | `app/Models/` — `Role`, `User`, `Project`, `Task`, `TaskUpdate` (immutable), `TaskComment`, `Attachment`, `Notification` (in-app, NOT Laravel's), `ActivityLog`, `Setting` |
 | Services | `app/Services/` — `TaskService`, `ProjectService`, `ProjectHealthService`, `DeadlineService`, `NotificationService`, `ActivityLogger`, `Settings` |
 | Auth/authz | `app/Policies/ProjectPolicy.php`, `app/Policies/TaskPolicy.php`, `Gate::before` (admins pass all), `Gate 'admin'`, middleware alias `admin`, `EnsureUserIsActive`, `RunDeadlineChecks`, `SecurityHeaders` |
@@ -27,7 +28,7 @@ php artisan serve
 | Layout | `resources/views/components/layouts/app.blade.php` (`<x-layouts.app title="…" :full-width="false" :bare="false">`) and `layouts/guest.blade.php` (`<x-layouts.guest title="…">`) |
 | Components | `resources/views/components/*` (see §4) |
 | CSS/JS | `resources/css/app.css` (utility classes in §5), `resources/js/app.js` auto-loads `resources/js/components/*.js`; `core.js` has `toasts`, `statusProgress`, `window.taskflowFetch` |
-| Seed data | `database/seeders/DatabaseSeeder.php`, factories for User/Project/Task |
+| Seed data | `database/seeders/DatabaseSeeder.php` (roles + the ADMIN_* administrator, no sample data), `DemoDataSeeder.php` (opt-in demo content), factories for User/Project/Task |
 | Tests | `tests/TestCase.php` (calls `withoutVite()`, helpers `admin()`, `regularUser()`), `tests/Feature/Foundation/TaskServiceTest.php` |
 
 If you believe a foundation file has a bug or is missing something you need, **do not edit it** — work around it
@@ -46,6 +47,7 @@ The only exception: files explicitly listed as yours in §7 (including the three
 * **Roll-up**: a parent's progress = average of non-cancelled subtasks (its progress field is locked in the UI). Project progress = average of top-level non-cancelled tasks.
 * **Project health** (`ProjectHealthService::evaluate($project)` → `['health' => ProjectHealth, 'reasons' => string[], 'stats' => [...]]`) with thresholds in Settings. Cached on `projects.health` / `projects.progress`.
 * **Auto membership (reduced duplicate entry)**: creator, assignee and collaborators are automatically added as project members.
+* **Departments**: every user belongs to one of the seven `App\Enums\Department` cases (Human Resources, Leasing, Marketing, Security, Operations, Information Technology, Accounting). It is required on the admin user form and the profile, and identifies a task's owning department through its assignee — `Task::forDepartment()`, the department filter on My Tasks, and the "Work by department" panel on the executive dashboard.
 * **Authorization boundaries**: admins can do everything. Regular users see only projects they own/created/are members of and tasks inside them (plus tasks they're assigned/collaborating on). See policies.
 
 ### Service API (use these, don't re-implement)
@@ -83,6 +85,7 @@ Task::visibleTo($user) ->involving($user) ->topLevel() ->open() ->status($s) ->d
 $task->project ->parent ->subtasks ->assignee ->creator ->collaborators ->updates (newest first) ->comments ->attachments
 $task->isSubtask() ->isOverdue() ->isDueSoon() ->dueLabel() ->isCollaborator($u) ->stakeholderIds()
 $user->isAdmin() ->initials() ->firstName() ->unreadNotifications() ->notifications ->projects ->assignedTasks
+User::department($dept)  Task::forDepartment($dept)   Department::options() ::fromLabel($freeText)  $dept->label() ->code() ->color() ->icon()
 TaskStatus::options() ::openValues() ::fromProgress($p)  $status->label() ->color() ->isOpen()
 ```
 
@@ -127,6 +130,8 @@ Admin (`admin.` prefix, `admin` middleware): `admin.executive`, `admin.meeting`,
 <x-status-badge :status="$task->status" size="sm|md|lg" />
 <x-priority-badge :priority="$task->priority" :show-low="false" />
 <x-health-badge :health="$project->health" size="sm|md|lg" />
+<x-department-badge :department="$user->department" size="sm|md|lg" :short="false" />
+<x-progress-ring :value="72" :size="120" sublabel="complete" />
 <x-project-status-badge :status="$project->status" />
 <x-progress-bar :value="$task->progress" size="xs|sm|md|lg" :show-label="true" color="indigo" />
 <x-avatar :user="$user" size="xs|sm|md|lg|xl" />   <x-avatar-stack :users="$task->collaborators" :max="4" />

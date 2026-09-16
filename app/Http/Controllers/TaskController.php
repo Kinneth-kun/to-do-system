@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\Department;
 use App\Enums\Priority;
 use App\Enums\TaskStatus;
 use App\Models\Project;
@@ -17,7 +18,7 @@ class TaskController extends Controller
 {
     public function index(Request $request): View
     {
-        $filters = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'string', 'in:pending,in_progress,completed,delayed,on_hold,cancelled'], 'project_id' => ['nullable', 'integer', 'exists:projects,id'], 'mine' => ['nullable', 'boolean']]);
+        $filters = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'string', 'in:pending,in_progress,completed,delayed,on_hold,cancelled'], 'project_id' => ['nullable', 'integer', 'exists:projects,id'], 'mine' => ['nullable', 'boolean'], 'department' => ['nullable', 'string']]);
         if (! empty($filters['project_id'])) {
             abort_unless(Project::query()->visibleTo($request->user())->whereKey($filters['project_id'])->exists(), 404);
         }
@@ -26,6 +27,7 @@ class TaskController extends Controller
             ->when(($filters['status'] ?? null), fn ($query, $status) => $query->status($status))
             ->when(($filters['project_id'] ?? null), fn ($query, $id) => $query->where('project_id', $id))
             ->when(filter_var($filters['mine'] ?? false, FILTER_VALIDATE_BOOLEAN), fn ($query) => $query->involving($request->user()))
+            ->when(Department::tryFrom((string) ($filters['department'] ?? '')), fn ($query, $department) => $query->forDepartment($department))
             ->latest('due_date')->latest()->paginate(20)->withQueryString();
         $projects = Project::query()->visibleTo($request->user())->orderBy('name')->get(['id', 'name']);
 

@@ -22,7 +22,7 @@ class ProfileTest extends TestCase
             'username' => 'updated.name',
             'email' => 'updated@example.com',
             'job_title' => 'Lead Planner',
-            'department' => 'Operations',
+            'department' => \App\Enums\Department::Operations->value,
             'avatar_color' => 'teal',
         ]);
 

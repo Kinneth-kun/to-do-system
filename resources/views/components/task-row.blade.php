@@ -38,7 +38,7 @@
                     </a>
                 @endif
                 <x-due-date :task="$task" />
-                <x-status-badge :status="$task->status" size="sm" class="sm:hidden" />
+                <span class="sm:hidden"><x-status-badge :status="$task->status" size="sm" /></span>
             </div>
             @if ($showRemark && $task->latest_remark)
                 <p class="mt-1 line-clamp-1 text-xs text-slate-500 italic">“{{ $task->latest_remark }}”</p>
@@ -48,9 +48,14 @@
         <div class="hidden w-28 shrink-0 md:block">
             <x-progress-bar :value="$task->progress" size="sm" :show-label="true" />
         </div>
-        <x-status-badge :status="$task->status" class="hidden shrink-0 sm:inline-flex" />
+        <span class="hidden shrink-0 sm:block"><x-status-badge :status="$task->status" /></span>
         @if ($showAssignee)
-            <x-avatar :user="$task->assignee" size="sm" class="hidden shrink-0 sm:inline-flex" />
+            <span class="hidden shrink-0 items-center gap-1.5 sm:flex">
+                <x-avatar :user="$task->assignee" size="sm" />
+                @if ($task->assignee?->department)
+                    <x-department-badge :department="$task->assignee->department" size="sm" :short="true" class="hidden lg:inline-flex" />
+                @endif
+            </span>
         @endif
         @if ($canUpdate)
             <button type="button" class="btn-ghost btn-sm shrink-0" x-on:click="open = !open" x-bind:aria-expanded="open" title="Quick update">

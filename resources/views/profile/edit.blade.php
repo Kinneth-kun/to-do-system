@@ -18,7 +18,7 @@
                     <x-form.input name="username" label="Username" :value="$user->username" required autocomplete="username" help="Used for mentions such as @username." />
                     <x-form.input name="email" type="email" label="Email address" :value="$user->email" required autocomplete="email" />
                     <x-form.input name="job_title" label="Job title" :value="$user->job_title" autocomplete="organization-title" />
-                    <x-form.input name="department" label="Department" :value="$user->department" />
+                    <x-form.select name="department" label="Department" :options="\App\Enums\Department::options()" :value="$user->department" placeholder="Select a department" required />
                     <x-form.select name="avatar_color" label="Avatar color" :options="collect(\App\Models\User::AVATAR_COLORS)->mapWithKeys(fn ($color) => [$color => ucfirst($color)])->all()" :value="$user->avatar_color" required />
                 </div>
                 <div class="flex justify-end border-t border-slate-100 pt-5">
