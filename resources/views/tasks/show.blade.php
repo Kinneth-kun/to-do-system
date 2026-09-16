@@ -32,7 +32,7 @@
                 <a class="btn-secondary" href="{{ route('tasks.edit', $task) }}"><x-icon name="pencil" class="h-4 w-4" /> Edit</a>
             @endcan
             @can('delete', $task)
-                <form method="POST" action="{{ route('tasks.destroy', $task) }}" onsubmit="return confirm('Delete this task and its subtasks?')">
+                <form method="POST" action="{{ route('tasks.destroy', $task) }}" x-data="confirmable({ title: 'Delete task', message: 'This deletes the task and all of its subtasks, along with their update history. This cannot be undone.', confirm: 'Delete task' })" x-on:submit.prevent="ask($event)">
                     @csrf @method('DELETE')
                     <button class="btn-ghost text-red-600 hover:bg-red-50" type="submit" aria-label="Delete task"><x-icon name="trash" class="h-4 w-4" /></button>
                 </form>

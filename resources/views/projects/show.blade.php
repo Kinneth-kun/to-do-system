@@ -35,7 +35,7 @@
                 <a href="{{ route('projects.edit', $project) }}" class="btn-secondary"><x-icon name="pencil" class="h-4 w-4" /> Edit</a>
             @endcan
             @can('delete', $project)
-                <form method="POST" action="{{ route('projects.destroy', $project) }}" onsubmit="return confirm('Delete this project and all of its tasks?')">
+                <form method="POST" action="{{ route('projects.destroy', $project) }}" x-data="confirmable({ title: 'Delete project', message: 'This deletes {{ addslashes($project->name) }} and every task inside it. This cannot be undone.', confirm: 'Delete project' })" x-on:submit.prevent="ask($event)">
                     @csrf @method('DELETE')
                     <button class="btn-ghost text-red-600 hover:bg-red-50" type="submit" aria-label="Delete project"><x-icon name="trash" class="h-4 w-4" /></button>
                 </form>

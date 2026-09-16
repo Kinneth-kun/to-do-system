@@ -20,13 +20,9 @@
         </select>
     </x-form.field>
     @if (! $project)
-        <x-form.field label="Members" name="member_ids" help="Optional — assignees are added automatically later. Hold Ctrl/Cmd to select several.">
-            <select name="member_ids[]" multiple class="form-select h-32">
-                @foreach ($users as $user)
-                    <option value="{{ $user->id }}" @selected(in_array($user->id, (array) old('member_ids', [])))>{{ $user->name }} ({{ '@'.$user->username }})</option>
-                @endforeach
-            </select>
-        </x-form.field>
+        <div class="sm:col-span-2">
+            <x-member-picker :users="$users" :exclude="auth()->id()" />
+        </div>
     @elseif (auth()->user()->isAdmin() || auth()->id() === $project->owner_id)
         <x-form.select name="owner_id" label="Owner" :options="$users->pluck('name', 'id')->all()" :value="$project->owner_id" required />
     @endif

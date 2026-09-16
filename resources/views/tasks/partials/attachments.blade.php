@@ -14,7 +14,7 @@
                 </div>
                 @can('comment', $task)
                     @if ($attachment->user_id === auth()->id() || auth()->user()->can('edit', $task))
-                        <form method="POST" action="{{ route('attachments.destroy', $attachment) }}" onsubmit="return confirm('Delete this attachment?')">
+                        <form method="POST" action="{{ route('attachments.destroy', $attachment) }}" x-data="confirmable({ title: 'Delete attachment', message: 'The file will be removed from this task permanently.', confirm: 'Delete' })" x-on:submit.prevent="ask($event)">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="btn-icon text-slate-400 hover:text-red-600" aria-label="Delete {{ $attachment->original_name }}"><x-icon name="trash" class="h-4 w-4" /></button>

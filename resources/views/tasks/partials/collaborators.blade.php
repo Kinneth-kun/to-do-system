@@ -14,7 +14,7 @@
                         <x-avatar :user="$collaborator" size="sm" />
                         <span class="max-w-32 truncate text-sm text-slate-700">{{ $collaborator->name }}</span>
                         @can('manageCollaborators', $task)
-                            <form method="POST" action="{{ route('tasks.collaborators.destroy', [$task, $collaborator]) }}" onsubmit="return confirm('Remove this collaborator?')">
+                            <form method="POST" action="{{ route('tasks.collaborators.destroy', [$task, $collaborator]) }}" x-data="confirmable({ title: 'Remove collaborator', message: 'They will stop receiving updates about this task.', confirm: 'Remove', danger: false })" x-on:submit.prevent="ask($event)">
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="btn-icon h-7 w-7 text-slate-400 hover:text-red-600" aria-label="Remove {{ $collaborator->name }}">

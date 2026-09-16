@@ -37,15 +37,41 @@ class TaskServiceTest extends TestCase
         $this->project = ProjectService::create(['name' => 'Website Revamp', 'due_date' => now()->addMonth()->toDateString()], $this->owner);
     }
 
-    public function test_create_task_records_history_adds_members_and_notifies_assignee(): void
+    public function test_create_task_records_history_and_notifies_assignee(): void
     {
         $task = TaskService::create(['project_id' => $this->project->id, 'title' => 'Design homepage', 'assignee_id' => $this->member->id], $this->owner);
 
         $this->assertSame(TaskStatus::Pending, $task->status);
         $this->assertSame(0, $task->progress);
-        $this->assertTrue($this->project->fresh()->isMember($this->member));
         $this->assertSame(1, $task->updates()->where('type', TaskUpdateType::Created->value)->count());
         $this->assertTrue(Notification::query()->where('user_id', $this->member->id)->where('type', NotificationType::TaskAssigned->value)->exists());
+    }
+
+    public function test_project_membership_is_never_granted_implicitly(): void
+    {
+        $outsider = $this->regularUser();
+
+        // Assigning work does not enrol anyone in the project...
+        $task = TaskService::create(['project_id' => $this->project->id, 'title' => 'Externally assigned', 'assignee_id' => $outsider->id], $this->owner);
+        $this->assertFalse($this->project->fresh()->isMember($outsider), 'assignee must not be auto-added');
+
+        // ...nor does collaborating on it...
+        $collaborator = $this->regularUser();
+        TaskService::addCollaborator($task, $collaborator, $this->owner);
+        $this->assertFalse($this->project->fresh()->isMember($collaborator), 'collaborator must not be auto-added');
+
+        // ...nor does being reassigned later.
+        $another = $this->regularUser();
+        TaskService::updateDetails($task->fresh(), ['assignee_id' => $another->id], $this->owner);
+        $this->assertFalse($this->project->fresh()->isMember($another), 'new assignee must not be auto-added');
+
+        // The assignee can still work on the task they were given.
+        $this->assertTrue($another->can('view', $task->fresh()));
+        $this->assertTrue($another->can('update', $task->fresh()));
+
+        // Membership only happens when somebody chooses it.
+        ProjectService::addMember($this->project, $outsider, $this->owner);
+        $this->assertTrue($this->project->fresh()->isMember($outsider));
     }
 
     public function test_progress_drives_status_and_history_keeps_old_and_new_values(): void
