@@ -14,10 +14,13 @@ class LookupController extends Controller
     public function users(Request $request): JsonResponse
     {
         $data = $request->validate(['q' => ['nullable', 'string', 'max:100'], 'project_id' => ['nullable', 'integer', 'exists:projects,id'], 'limit' => ['nullable', 'integer', 'min:1', 'max:50']]);
+        // Directory lookup for pickers and @mentions. Deliberately does NOT return email
+        // addresses — nothing in the UI needs them, and this endpoint is open to every
+        // signed-in account, so returning them would hand over the whole staff directory.
         $query = User::query()->active();
         if (filled($data['q'] ?? null)) {
-            $term = '%'.$data['q'].'%';
-            $query->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('username', 'like', $term)->orWhere('email', 'like', $term));
+            $term = '%'.addcslashes((string) $data['q'], '%_\\').'%';
+            $query->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('username', 'like', $term));
         }
         $project = null;
         if (! empty($data['project_id'])) {
@@ -26,7 +29,7 @@ class LookupController extends Controller
         }
         $users = $query->orderBy('name')->limit($data['limit'] ?? 10)->get();
 
-        return response()->json(['data' => $users->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'username' => $user->username, 'email' => $user->email, 'job_title' => $user->job_title, 'initials' => $user->initials(), 'avatar_color' => $user->avatar_color])->values()]);
+        return response()->json(['data' => $users->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name, 'username' => $user->username, 'job_title' => $user->job_title, 'initials' => $user->initials(), 'avatar_color' => $user->avatar_color])->values()]);
     }
 
     public function parentTasks(Request $request, Project $project): JsonResponse

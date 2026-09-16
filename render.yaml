@@ -1,0 +1,77 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# One web service, one persistent disk. The scheduler (and therefore the 08:00 weekday briefing)
+# runs inside this service, not as a Render cron job: a disk attaches to a single service and
+# cron jobs cannot read it, so a separate cron service could not reach the database.
+#
+# A disk also means deploys are not zero-downtime (the old instance stops before the new one
+# starts) and the service cannot run on more than one instance. Both are fine at this size.
+services:
+  - type: web
+    name: taskflow
+    runtime: docker
+    plan: starter            # a disk requires a paid instance type
+    region: singapore        # closest to Manila; see Render's region list
+    healthCheckPath: /up
+    autoDeploy: true
+
+    disk:
+      name: taskflow-data
+      mountPath: /var/data   # SQLite database + uploaded attachments
+      sizeGB: 1
+
+    envVars:
+      - key: APP_NAME
+        value: TaskFlow
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY          # php artisan key:generate --show
+        sync: false
+      - key: APP_URL          # https://<your-service>.onrender.com
+        sync: false
+      - key: APP_TIMEZONE
+        value: Asia/Manila    # the 08:00 briefing fires in this zone
+
+      # Data that must outlive a deploy
+      - key: DB_CONNECTION
+        value: sqlite
+      - key: DB_DATABASE
+        value: /var/data/database.sqlite
+      - key: LOCAL_DISK_ROOT
+        value: /var/data/attachments
+
+      # Sessions, cache and queue live in the database, so they persist too
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: SESSION_HTTP_ONLY
+        value: "true"
+      - key: SESSION_SAME_SITE
+        value: lax
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: LOG_CHANNEL
+        value: stderr        # Render captures stdout/stderr as logs
+
+      # The administrator, created or updated on every deploy by the seeder
+      - key: ADMIN_NAME
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_DEPARTMENT
+        value: information_technology
+      - key: ADMIN_PASSWORD
+        sync: false
+
+      # Optional: AI-written briefings. Leave unset for plain summaries.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-5

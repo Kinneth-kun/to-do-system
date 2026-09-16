@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'anthropic' => [
+        'key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ANTHROPIC_MODEL', 'claude-opus-5'),
+        'effort' => env('ANTHROPIC_EFFORT', 'low'),
+        'timeout' => (int) env('ANTHROPIC_TIMEOUT', 30),
+    ],
+
 ];

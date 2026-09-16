@@ -42,7 +42,26 @@ class NotificationController extends Controller
         abort_unless($notification->user_id === $request->user()->id, 404);
         $notification->markAsRead();
 
-        return redirect()->to($notification->url ?: route('notifications.index'));
+        return redirect()->to($this->safeTarget($notification->url));
+    }
+
+    /**
+     * Notification URLs are generated server-side today, but this endpoint is a one-click
+     * redirect for a signed-in user — only ever send them somewhere on this site.
+     */
+    private function safeTarget(?string $url): string
+    {
+        $fallback = route('notifications.index');
+
+        if (blank($url)) {
+            return $fallback;
+        }
+
+        if (str_starts_with($url, '/') && ! str_starts_with($url, '//')) {
+            return $url;
+        }
+
+        return str_starts_with($url, url('/')) ? $url : $fallback;
     }
 
     public function markRead(Request $request, Notification $notification): RedirectResponse

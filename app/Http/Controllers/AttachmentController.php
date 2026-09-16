@@ -23,7 +23,7 @@ class AttachmentController extends Controller
             'original_name' => $file->getClientOriginalName(),
             'path' => $path,
             'disk' => config('filesystems.default', 'local'),
-            'mime_type' => $file->getClientMimeType(),
+            'mime_type' => $file->getMimeType(),   // server-detected, not the browser's claim
             'size' => $file->getSize(),
         ]);
 

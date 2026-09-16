@@ -32,7 +32,9 @@ return [
 
         'local' => [
             'driver' => 'local',
-            'root' => storage_path('app/private'),
+            // In production this points at the mounted persistent disk (LOCAL_DISK_ROOT),
+            // so uploaded attachments survive a redeploy.
+            'root' => env('LOCAL_DISK_ROOT', storage_path('app/private')),
             'serve' => true,
             'throw' => false,
             'report' => false,
