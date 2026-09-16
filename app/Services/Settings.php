@@ -33,6 +33,10 @@ class Settings
         'health.due_soon_progress_percent' => ['default' => 75, 'type' => 'int', 'min' => 0, 'max' => 100, 'group' => 'Project health', 'label' => 'At Risk when due soon and progress below (%)', 'help' => 'A project inside the due-soon window with progress below this is At Risk.'],
         'health.overdue_project_is_delayed' => ['default' => true, 'type' => 'bool', 'group' => 'Project health', 'label' => 'Project past its due date is Delayed', 'help' => 'An unfinished project past its own due date is always Delayed.'],
 
+        'digest.enabled' => ['default' => true, 'type' => 'bool', 'group' => 'Daily briefing', 'label' => 'Send the 8:00 am briefing', 'help' => 'A summary of overdue, due-today and upcoming work, delivered every weekday morning.'],
+        'digest.include_quiet_days' => ['default' => false, 'type' => 'bool', 'group' => 'Daily briefing', 'label' => 'Send even when there is nothing open', 'help' => 'Off by default, so a clear day produces no notification.'],
+        'ai.briefings_enabled' => ['default' => true, 'type' => 'bool', 'group' => 'Daily briefing', 'label' => 'Write the summary with AI', 'help' => 'Uses Claude to turn the numbers into a short briefing. Needs ANTHROPIC_API_KEY; without it a plain summary is sent instead.'],
+
         'security.max_login_attempts' => ['default' => 5, 'type' => 'int', 'min' => 3, 'max' => 20, 'group' => 'Security', 'label' => 'Failed logins before lockout', 'help' => 'Consecutive failed sign-ins before the account is temporarily locked.'],
         'security.lockout_minutes' => ['default' => 15, 'type' => 'int', 'min' => 1, 'max' => 1440, 'group' => 'Security', 'label' => 'Lockout duration (minutes)', 'help' => 'How long a locked account stays locked. Admins can unlock sooner.'],
     ];

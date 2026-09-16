@@ -119,7 +119,9 @@ class User extends Authenticatable
 
     public function notifications(): HasMany
     {
-        return $this->hasMany(Notification::class)->latest();
+        // id breaks ties: several notifications can share a timestamp (the morning digest
+        // lands in the same second as the delay notices that precede it).
+        return $this->hasMany(Notification::class)->latest()->latest('id');
     }
 
     public function unreadNotifications(): HasMany

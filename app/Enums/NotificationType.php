@@ -12,6 +12,7 @@ enum NotificationType: string
     case TaskCompleted = 'task_completed';
     case Mentioned = 'mentioned';
     case CommentAdded = 'comment_added';
+    case DailyDigest = 'daily_digest';
 
     public function label(): string
     {
@@ -24,6 +25,7 @@ enum NotificationType: string
             self::TaskCompleted => 'Task completed',
             self::Mentioned => 'Mentioned you',
             self::CommentAdded => 'New comment',
+            self::DailyDigest => 'Daily briefing',
         };
     }
 
@@ -38,6 +40,7 @@ enum NotificationType: string
             self::TaskDelayed => 'alert',
             self::TaskCompleted => 'check-circle',
             self::Mentioned => 'at',
+            self::DailyDigest => 'sparkles',
             self::CommentAdded => 'chat',
         };
     }
@@ -51,6 +54,7 @@ enum NotificationType: string
             self::TaskDelayed => 'red',
             self::TaskCompleted => 'emerald',
             self::Mentioned, self::CommentAdded => 'sky',
+            self::DailyDigest => 'violet',
         };
     }
 }
