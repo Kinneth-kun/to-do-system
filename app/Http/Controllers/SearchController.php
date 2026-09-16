@@ -15,9 +15,10 @@ class SearchController extends Controller
     {
         $data = $request->validate(['q' => ['nullable', 'string', 'max:100']]);
         $q = trim($data['q'] ?? '');
-        $projects = Project::query()->visibleTo($request->user())->with('owner')->when($q, fn ($query) => $query->where('name', 'like', "%{$q}%"))->limit(20)->get();
-        $tasks = Task::query()->visibleTo($request->user())->with(['project', 'assignee', 'parent', 'collaborators'])->when($q, fn ($query) => $query->where('title', 'like', "%{$q}%"))->limit(30)->get();
-        $users = User::query()->active()->when($q, fn ($query) => $query->where(fn ($inner) => $inner->where('name', 'like', "%{$q}%")->orWhere('username', 'like', "%{$q}%")))->limit(20)->get();
+        $like = '%'.addcslashes($q, '%_\\').'%';
+        $projects = Project::query()->visibleTo($request->user())->with('owner')->when($q, fn ($query) => $query->where('name', 'like', $like))->limit(20)->get();
+        $tasks = Task::query()->visibleTo($request->user())->with(['project', 'assignee', 'parent', 'collaborators'])->when($q, fn ($query) => $query->where('title', 'like', $like))->limit(30)->get();
+        $users = User::query()->active()->when($q, fn ($query) => $query->where(fn ($inner) => $inner->where('name', 'like', $like)->orWhere('username', 'like', $like)))->limit(20)->get();
 
         return view('search.index', compact('q', 'projects', 'tasks', 'users'));
     }
@@ -29,7 +30,7 @@ class SearchController extends Controller
         if ($q === '') {
             return response()->json(['query' => '', 'groups' => []]);
         }
-        $like = "%{$q}%";
+        $like = '%'.addcslashes($q, '%_\\').'%';
         $projects = Project::query()->visibleTo($request->user())->with('owner')->where('name', 'like', $like)->limit(5)->get();
         $tasks = Task::query()->visibleTo($request->user())->with('project')->where('title', 'like', $like)->limit(5)->get();
         $users = User::query()->active()->where(fn ($query) => $query->where('name', 'like', $like)->orWhere('username', 'like', $like))->limit(5)->get();
