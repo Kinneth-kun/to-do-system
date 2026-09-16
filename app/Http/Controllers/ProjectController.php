@@ -7,8 +7,10 @@ use App\Enums\ProjectStatus;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\ProjectService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -35,19 +37,67 @@ class ProjectController extends Controller
         return view('projects.create', ['users' => $users, 'statuses' => ProjectStatus::options(), 'priorities' => Priority::options()]);
     }
 
-    public function store(Request $request): RedirectResponse
+    /**
+     * Create a project.
+     *
+     * Also serves the "create a project without leaving the task form" flow:
+     *  - a JSON request gets the new project back so the page can select it in place;
+     *  - a normal request with `return_to` goes back to that page with ?project_id= set,
+     *    which is the no-JavaScript fallback.
+     * Status, priority and colour are optional here — ProjectService fills sensible defaults —
+     * so a minimal "just the name" create works.
+     */
+    public function store(Request $request): RedirectResponse|JsonResponse
     {
         Gate::authorize('create', Project::class);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:10000'],
-            'status' => ['required', 'string', 'in:active,on_hold,completed,cancelled'], 'priority' => ['required', 'string', 'in:low,medium,high,urgent'],
-            'color' => ['required', 'string', 'in:indigo,violet,sky,emerald,amber,rose,teal,fuchsia,orange,cyan'],
+            'status' => ['nullable', 'string', 'in:active,on_hold,completed,cancelled'], 'priority' => ['nullable', 'string', 'in:low,medium,high,urgent'],
+            'color' => ['nullable', 'string', 'in:indigo,violet,sky,emerald,amber,rose,teal,fuchsia,orange,cyan'],
             'start_date' => ['nullable', 'date'], 'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
             'member_ids' => ['array'], 'member_ids.*' => ['integer', 'exists:users,id'],
+            'return_to' => ['nullable', 'string', 'max:2000'],
         ]);
-        $project = ProjectService::create($data, $request->user());
+
+        $project = ProjectService::create(Arr::except($data, ['return_to']), $request->user());
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'project' => [
+                    'id' => $project->id,
+                    'name' => $project->name,
+                    'color' => $project->color,
+                    'url' => route('projects.show', $project),
+                ],
+            ], 201);
+        }
+
+        if ($path = $this->safeReturnPath($request->input('return_to'))) {
+            return redirect()->to($this->appendQuery($path, ['project_id' => $project->id]))
+                ->with('success', 'Project "'.$project->name.'" created — now add your task.');
+        }
 
         return redirect()->route('projects.show', $project)->with('success', 'Project created.');
+    }
+
+    /** Only same-site relative paths, so `return_to` cannot be used as an open redirect. */
+    private function safeReturnPath(?string $value): ?string
+    {
+        if (blank($value) || ! str_starts_with($value, '/') || str_starts_with($value, '//')) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /** @param array<string, mixed> $params */
+    private function appendQuery(string $path, array $params): string
+    {
+        [$path, $existing] = array_pad(explode('?', $path, 2), 2, '');
+        parse_str($existing, $query);
+
+        return $path.'?'.http_build_query(array_merge($query, $params));
     }
 
     public function show(Request $request, Project $project): View
