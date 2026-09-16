@@ -7,7 +7,8 @@ Run locally:
 
 ```bash
 composer install && npm install
-php artisan migrate:fresh --seed     # admin@taskflow.test / password  (+ maria, james, aisha, daniel, sofia, liam, grace @taskflow.test)
+php artisan migrate:fresh --seed     # roles + one administrator, read from ADMIN_* in your .env
+php artisan db:seed --class=DemoDataSeeder   # optional: sample people, projects and history
 npm run build                        # or: npm run dev
 php artisan serve
 ```
@@ -27,7 +28,7 @@ php artisan serve
 | Layout | `resources/views/components/layouts/app.blade.php` (`<x-layouts.app title="…" :full-width="false" :bare="false">`) and `layouts/guest.blade.php` (`<x-layouts.guest title="…">`) |
 | Components | `resources/views/components/*` (see §4) |
 | CSS/JS | `resources/css/app.css` (utility classes in §5), `resources/js/app.js` auto-loads `resources/js/components/*.js`; `core.js` has `toasts`, `statusProgress`, `window.taskflowFetch` |
-| Seed data | `database/seeders/DatabaseSeeder.php`, factories for User/Project/Task |
+| Seed data | `database/seeders/DatabaseSeeder.php` (roles + the ADMIN_* administrator, no sample data), `DemoDataSeeder.php` (opt-in demo content), factories for User/Project/Task |
 | Tests | `tests/TestCase.php` (calls `withoutVite()`, helpers `admin()`, `regularUser()`), `tests/Feature/Foundation/TaskServiceTest.php` |
 
 If you believe a foundation file has a bug or is missing something you need, **do not edit it** — work around it
