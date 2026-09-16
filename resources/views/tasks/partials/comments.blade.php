@@ -15,7 +15,7 @@
                     <p class="mt-1 whitespace-pre-line break-words text-sm text-slate-600">{{ $comment->body }}</p>
                     @can('comment', $task)
                         @if ($comment->user_id === auth()->id() || auth()->user()->can('edit', $task))
-                            <form method="POST" action="{{ route('comments.destroy', $comment) }}" class="mt-2" onsubmit="return confirm('Delete this comment?')">
+                            <form method="POST" action="{{ route('comments.destroy', $comment) }}" class="mt-2" x-data="confirmable({ title: 'Delete comment', message: 'This removes the comment for everyone on the task.', confirm: 'Delete' })" x-on:submit.prevent="ask($event)">
                                 @csrf
                                 @method('DELETE')
                                 <button class="text-xs font-medium text-red-600 hover:text-red-700" type="submit">Delete</button>

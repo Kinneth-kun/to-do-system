@@ -81,5 +81,8 @@
 {{-- Rendered once per page (this partial is in the layout) and shared by every project picker. --}}
 <x-new-project-modal />
 
+{{-- Shared confirmation dialog, used instead of the browser's confirm(). --}}
+<x-confirm-modal />
+
 {{-- Press "n" anywhere (outside a field) to open quick create. --}}
 <div x-data x-on:keydown.window="if ($event.key === 'n' && !/^(INPUT|TEXTAREA|SELECT)$/.test($event.target.tagName) && !$event.target.isContentEditable && !$event.metaKey && !$event.ctrlKey) { $event.preventDefault(); $dispatch('open-modal', 'quick-create') }" class="hidden"></div>

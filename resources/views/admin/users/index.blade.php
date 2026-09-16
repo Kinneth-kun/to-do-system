@@ -68,7 +68,7 @@
                                         </form>
                                     @endif
                                     @if (! $user->is(auth()->user()))
-                                        <form method="POST" action="{{ route('admin.users.toggle-active', $user) }}" onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this user?' : 'Activate this user?' }}')">
+                                        <form method="POST" action="{{ route('admin.users.toggle-active', $user) }}" x-data="confirmable({ title: '{{ $user->is_active ? 'Deactivate' : 'Activate' }} {{ addslashes($user->name) }}', message: '{{ $user->is_active ? 'They will be signed out immediately and cannot sign in until reactivated. Their tasks and history are kept.' : 'They will be able to sign in again straight away.' }}', confirm: '{{ $user->is_active ? 'Deactivate' : 'Activate' }}', danger: {{ $user->is_active ? 'true' : 'false' }} })" x-on:submit.prevent="ask($event)">
                                             @csrf
                                             <button type="submit" class="btn-icon {{ $user->is_active ? 'text-red-600' : 'text-emerald-600' }}" title="{{ $user->is_active ? 'Deactivate user' : 'Activate user' }}" aria-label="{{ $user->is_active ? 'Deactivate user' : 'Activate user' }}"><x-icon name="{{ $user->is_active ? 'pause' : 'check' }}" class="h-4 w-4" /></button>
                                         </form>
@@ -105,7 +105,7 @@
                             <form method="POST" action="{{ route('admin.users.unlock', $user) }}">@csrf<button type="submit" class="btn-sm btn-secondary"><x-icon name="unlock" class="h-4 w-4" /> Unlock</button></form>
                         @endif
                         @if (! $user->is(auth()->user()))
-                            <form method="POST" action="{{ route('admin.users.toggle-active', $user) }}" onsubmit="return confirm('{{ $user->is_active ? 'Deactivate this user?' : 'Activate this user?' }}')">@csrf<button type="submit" class="btn-sm {{ $user->is_active ? 'btn-danger' : 'btn-secondary' }}"><x-icon name="{{ $user->is_active ? 'pause' : 'check' }}" class="h-4 w-4" /> {{ $user->is_active ? 'Deactivate' : 'Activate' }}</button></form>
+                            <form method="POST" action="{{ route('admin.users.toggle-active', $user) }}" x-data="confirmable({ title: '{{ $user->is_active ? 'Deactivate' : 'Activate' }} {{ addslashes($user->name) }}', message: '{{ $user->is_active ? 'They will be signed out immediately and cannot sign in until reactivated. Their tasks and history are kept.' : 'They will be able to sign in again straight away.' }}', confirm: '{{ $user->is_active ? 'Deactivate' : 'Activate' }}', danger: {{ $user->is_active ? 'true' : 'false' }} })" x-on:submit.prevent="ask($event)">@csrf<button type="submit" class="btn-sm {{ $user->is_active ? 'btn-danger' : 'btn-secondary' }}"><x-icon name="{{ $user->is_active ? 'pause' : 'check' }}" class="h-4 w-4" /> {{ $user->is_active ? 'Deactivate' : 'Activate' }}</button></form>
                         @endif
                     </div>
                 </div>

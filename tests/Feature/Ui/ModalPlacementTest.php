@@ -59,4 +59,44 @@ class ModalPlacementTest extends TestCase
         $this->assertStringContainsString('role="dialog"', $html);
         $this->assertStringContainsString('aria-modal="true"', $html);
     }
+
+    public function test_destructive_actions_use_the_in_app_dialog_not_the_browser_confirm(): void
+    {
+        $user = $this->regularUser();
+        $project = \App\Services\ProjectService::create(['name' => 'Confirm Me'], $user);
+        $task = \App\Services\TaskService::create(['project_id' => $project->id, 'title' => 'Confirm task'], $user);
+
+        $pages = [
+            route('projects.show', $project),
+            route('tasks.show', $task),
+        ];
+
+        foreach ($pages as $page) {
+            $html = $this->actingAs($user)->get($page)->assertOk()->getContent();
+
+            $this->assertStringNotContainsString('return confirm(', $html,
+                "native confirm() shows the raw origin and cannot be styled: {$page}");
+            $this->assertStringContainsString('confirmable(', $html,
+                "destructive forms should ask through the shared dialog: {$page}");
+        }
+    }
+
+    public function test_admin_user_actions_use_the_in_app_dialog(): void
+    {
+        $admin = $this->admin();
+        $this->regularUser(['name' => 'Someone Else']);
+
+        $html = $this->actingAs($admin)->get(route('admin.users.index'))->assertOk()->getContent();
+
+        $this->assertStringNotContainsString('return confirm(', $html);
+        $this->assertStringContainsString('Deactivate Someone Else', $html);
+    }
+
+    public function test_the_confirmation_dialog_renders_once(): void
+    {
+        $html = $this->actingAs($this->regularUser())->get(route('tasks.index'))->assertOk()->getContent();
+
+        $this->assertSame(1, substr_count($html, 'x-data="confirmDialog"'));
+        $this->assertSame(1, substr_count($html, "modal('confirm'"));
+    }
 }
