@@ -74,6 +74,54 @@
         </section>
     </div>
 
+    {{-- Work by department: who owns what, and where the delays sit --}}
+    @php
+        $byDepartment = \App\Models\User::query()
+            ->whereNotNull('department')
+            ->withCount([
+                'assignedTasks as open_tasks' => fn ($q) => $q->whereIn('status', \App\Enums\TaskStatus::openValues()),
+                'assignedTasks as delayed_tasks' => fn ($q) => $q->where('status', \App\Enums\TaskStatus::Delayed->value),
+                'assignedTasks as completed_tasks' => fn ($q) => $q->where('status', \App\Enums\TaskStatus::Completed->value),
+            ])
+            ->get()
+            ->groupBy(fn ($user) => $user->department->value)
+            ->map(fn ($users) => [
+                'people' => $users->count(),
+                'open' => $users->sum('open_tasks'),
+                'delayed' => $users->sum('delayed_tasks'),
+                'completed' => $users->sum('completed_tasks'),
+            ]);
+        $maxOpen = max(1, $byDepartment->max('open') ?? 1);
+    @endphp
+    <section class="card mb-6">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title">Work by department</h2>
+                <p class="mt-0.5 text-xs text-slate-500">Open tasks counted against the department of the person assigned.</p>
+            </div>
+        </div>
+        <div class="divide-y divide-slate-100">
+            @foreach (\App\Enums\Department::cases() as $department)
+                @php $row = $byDepartment[$department->value] ?? ['people' => 0, 'open' => 0, 'delayed' => 0, 'completed' => 0]; @endphp
+                <a href="{{ route('tasks.index', ['department' => $department->value]) }}"
+                   class="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition hover:bg-slate-50">
+                    <span class="w-full sm:w-52"><x-department-badge :department="$department" /></span>
+                    <span class="hidden w-20 text-xs text-slate-500 sm:inline">{{ $row['people'] }} {{ Str::plural('person', $row['people']) }}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="flex h-2 overflow-hidden rounded-full bg-slate-100">
+                            <span class="bg-{{ $department->color() }}-500" style="width: {{ round($row['open'] / $maxOpen * 100) }}%"></span>
+                        </span>
+                    </span>
+                    <span class="flex items-center gap-4 text-xs tabular-nums">
+                        <span class="text-slate-600"><span class="font-semibold text-slate-900">{{ $row['open'] }}</span> open</span>
+                        <span @class(['font-semibold text-red-600' => $row['delayed'] > 0, 'text-slate-400' => $row['delayed'] === 0])>{{ $row['delayed'] }} delayed</span>
+                        <span class="hidden text-slate-500 sm:inline">{{ $row['completed'] }} done</span>
+                    </span>
+                </a>
+            @endforeach
+        </div>
+    </section>
+
     {{-- Portfolio table --}}
     <section class="card overflow-hidden">
         <div class="card-header">

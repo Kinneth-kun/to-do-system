@@ -41,7 +41,7 @@ class UserControllerTest extends TestCase
             'username' => 'new.teammate',
             'email' => 'new.teammate@example.com',
             'job_title' => 'Coordinator',
-            'department' => 'Operations',
+            'department' => \App\Enums\Department::Operations->value,
             'avatar_color' => 'sky',
             'role_id' => Role::idFor(Role::USER),
             'password' => 'secure-password1',
@@ -63,6 +63,7 @@ class UserControllerTest extends TestCase
             'name' => $user->name,
             'username' => $user->username,
             'email' => $user->email,
+            'department' => $user->department->value,
             'avatar_color' => $user->avatar_color,
             'role_id' => Role::idFor(Role::ADMIN),
         ])->assertRedirect(route('admin.users.edit', $user))->assertSessionHas('success');
@@ -81,6 +82,7 @@ class UserControllerTest extends TestCase
             'name' => $admin->name,
             'username' => $admin->username,
             'email' => $admin->email,
+            'department' => $admin->department->value,
             'avatar_color' => $admin->avatar_color,
             'role_id' => Role::idFor(Role::USER),
         ])->assertRedirect()->assertSessionHas('error');

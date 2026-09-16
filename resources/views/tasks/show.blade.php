@@ -151,16 +151,24 @@
                 <div class="divide-y divide-slate-100">
                     <div class="flex items-center gap-3 px-5 py-3">
                         <x-avatar :user="$task->assignee" size="md" />
-                        <div class="min-w-0">
+                        <div class="min-w-0 flex-1">
                             <p class="eyebrow">Assignee</p>
                             <p class="truncate text-sm font-medium text-slate-800">{{ $task->assignee?->name ?? 'Unassigned' }}</p>
+                            @if ($task->assignee?->department)
+                                <a href="{{ route('tasks.index', ['department' => $task->assignee->department->value]) }}" class="mt-1 inline-block">
+                                    <x-department-badge :department="$task->assignee->department" size="sm" />
+                                </a>
+                            @endif
                         </div>
                     </div>
                     <div class="flex items-center gap-3 px-5 py-3">
                         <x-avatar :user="$task->creator" size="md" />
-                        <div class="min-w-0">
+                        <div class="min-w-0 flex-1">
                             <p class="eyebrow">Created by</p>
                             <p class="truncate text-sm font-medium text-slate-800">{{ $task->creator?->name ?? '—' }}</p>
+                            @if ($task->creator?->department)
+                                <p class="mt-0.5 truncate text-xs text-slate-500">{{ $task->creator->department->label() }}</p>
+                            @endif
                         </div>
                     </div>
                 </div>

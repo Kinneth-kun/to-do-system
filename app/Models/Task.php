@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Department;
 use App\Enums\Priority;
 use App\Enums\TaskStatus;
 use App\Services\Settings;
@@ -154,6 +155,14 @@ class Task extends Model
                 ->orWhere('assignee_id', $user->id)
                 ->orWhereHas('collaborators', fn (Builder $c) => $c->where('users.id', $user->id));
         });
+    }
+
+    /** Tasks whose primary assignee belongs to a department. */
+    public function scopeForDepartment(Builder $query, Department|string $department): Builder
+    {
+        $value = $department instanceof Department ? $department->value : $department;
+
+        return $query->whereHas('assignee', fn (Builder $user) => $user->where('department', $value));
     }
 
     /** Open tasks due today .. today + N days (N from settings when null). */

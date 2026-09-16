@@ -75,6 +75,9 @@
                                 <div class="min-w-0 flex-1">
                                     <p class="truncate text-sm font-medium text-slate-800">{{ $user->name }}</p>
                                     <p class="truncate text-xs text-slate-500">{{ $user->job_title ?: '@'.$user->username }}</p>
+                                    @if ($user->department)
+                                        <x-department-badge :department="$user->department" size="sm" class="mt-1" />
+                                    @endif
                                 </div>
                                 @if (auth()->user()->isAdmin())
                                     <a href="{{ route('admin.users.edit', $user) }}" class="btn-ghost btn-sm">Manage</a>

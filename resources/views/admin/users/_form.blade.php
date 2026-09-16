@@ -6,7 +6,7 @@
         <x-form.input name="email" type="email" label="Email address" :value="$user?->email" required autocomplete="email" />
         <x-form.select name="role_id" label="Role" :options="$roleOptions" :value="$user?->role_id" required />
         <x-form.input name="job_title" label="Job title" :value="$user?->job_title" />
-        <x-form.input name="department" label="Department" :value="$user?->department" />
+        <x-form.select name="department" label="Department" :options="\App\Enums\Department::options()" :value="$user?->department" placeholder="Select a department" required help="Used to identify this person's tasks." />
         <x-form.select name="avatar_color" label="Avatar color" :options="collect(\App\Models\User::AVATAR_COLORS)->mapWithKeys(fn ($color) => [$color => ucfirst($color)])->all()" :value="$user?->avatar_color ?: 'indigo'" required />
     </div>
     @unless ($isEdit)

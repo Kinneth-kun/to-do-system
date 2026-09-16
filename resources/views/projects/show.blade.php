@@ -121,6 +121,9 @@
                             <div class="min-w-0 flex-1">
                                 <p class="truncate text-sm font-medium text-slate-800">{{ $member->name }}</p>
                                 <p class="truncate text-xs text-slate-500">{{ $member->job_title ?: '@'.$member->username }}</p>
+                                @if ($member->department)
+                                    <x-department-badge :department="$member->department" size="sm" class="mt-1" />
+                                @endif
                             </div>
                             @if ($project->owner_id === $member->id)
                                 <span class="chip bg-indigo-50 text-indigo-700">Owner</span>

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Department;
 use App\Enums\TaskStatus;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -43,6 +44,7 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
+            'department' => Department::class,
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
@@ -167,6 +169,11 @@ class User extends Authenticatable
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeDepartment(Builder $query, Department|string $department): Builder
+    {
+        return $query->where('department', $department instanceof Department ? $department->value : $department);
     }
 
     public function scopeAdmins(Builder $query): Builder

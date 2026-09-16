@@ -50,7 +50,12 @@
         </div>
         <span class="hidden shrink-0 sm:block"><x-status-badge :status="$task->status" /></span>
         @if ($showAssignee)
-            <span class="hidden shrink-0 sm:block"><x-avatar :user="$task->assignee" size="sm" /></span>
+            <span class="hidden shrink-0 items-center gap-1.5 sm:flex">
+                <x-avatar :user="$task->assignee" size="sm" />
+                @if ($task->assignee?->department)
+                    <x-department-badge :department="$task->assignee->department" size="sm" :short="true" class="hidden lg:inline-flex" />
+                @endif
+            </span>
         @endif
         @if ($canUpdate)
             <button type="button" class="btn-ghost btn-sm shrink-0" x-on:click="open = !open" x-bind:aria-expanded="open" title="Quick update">

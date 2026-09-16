@@ -4,6 +4,7 @@
         'status' => $filters['status'] ?? null,
         'project_id' => $filters['project_id'] ?? null,
         'mine' => ! empty($filters['mine']) ? 1 : null,
+        'department' => $filters['department'] ?? null,
     ]);
 @endphp
 <x-layouts.app title="My Tasks">
@@ -39,6 +40,12 @@
             <x-icon name="search" class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input class="form-input pl-9" name="q" value="{{ $filters['q'] ?? '' }}" placeholder="Search tasks" aria-label="Search tasks">
         </div>
+        <select class="form-select sm:w-56" name="department" aria-label="Filter by department" onchange="this.form.submit()">
+            <option value="">All departments</option>
+            @foreach (\App\Enums\Department::options() as $value => $label)
+                <option value="{{ $value }}" @selected(($filters['department'] ?? '') === $value)>{{ $label }}</option>
+            @endforeach
+        </select>
         <select class="form-select sm:w-52" name="project_id" aria-label="Filter by project">
             <option value="">All projects</option>
             @foreach ($projects as $project)

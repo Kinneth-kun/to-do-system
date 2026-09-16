@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Enums\Department;
 use App\Enums\ProjectMemberRole;
 use App\Enums\ProjectStatus;
 use App\Models\Role;
@@ -35,7 +36,7 @@ class DatabaseSeeder extends Seeder
             'username' => 'admin',
             'email' => 'admin@taskflow.test',
             'job_title' => 'Operations Director',
-            'department' => 'Management',
+            'department' => Department::Operations,
             'avatar_color' => 'indigo',
             'password' => 'password',
             'email_verified_at' => now(),
@@ -49,13 +50,13 @@ class DatabaseSeeder extends Seeder
     private function seedDemoData(User $admin): void
     {
         $people = collect([
-            ['Maria Santos', 'maria', 'Project Manager', 'Operations', 'violet'],
-            ['James Carter', 'james', 'Software Engineer', 'Engineering', 'sky'],
-            ['Aisha Rahman', 'aisha', 'UX Designer', 'Design', 'rose'],
-            ['Daniel Kim', 'daniel', 'Data Analyst', 'Finance', 'emerald'],
-            ['Sofia Reyes', 'sofia', 'Marketing Lead', 'Marketing', 'amber'],
-            ['Liam O\'Brien', 'liam', 'QA Specialist', 'Engineering', 'teal'],
-            ['Grace Lee', 'grace', 'HR Coordinator', 'People', 'fuchsia'],
+            ['Maria Santos', 'maria', 'Project Manager', Department::Operations, 'violet'],
+            ['James Carter', 'james', 'Software Engineer', Department::InformationTechnology, 'sky'],
+            ['Aisha Rahman', 'aisha', 'UX Designer', Department::Marketing, 'rose'],
+            ['Daniel Kim', 'daniel', 'Financial Analyst', Department::Accounting, 'emerald'],
+            ['Sofia Reyes', 'sofia', 'Leasing Officer', Department::Leasing, 'amber'],
+            ['Liam O\'Brien', 'liam', 'Security Supervisor', Department::Security, 'teal'],
+            ['Grace Lee', 'grace', 'HR Coordinator', Department::HumanResources, 'fuchsia'],
         ])->mapWithKeys(fn ($p) => [$p[1] => User::query()->create([
             'name' => $p[0], 'username' => $p[1], 'email' => $p[1].'@taskflow.test',
             'job_title' => $p[2], 'department' => $p[3], 'avatar_color' => $p[4],
