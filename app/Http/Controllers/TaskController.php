@@ -68,7 +68,9 @@ class TaskController extends Controller
         }
         $task = TaskService::create($data, $request->user());
 
-        return redirect()->route('tasks.show', $task)->with('success', 'Task created.');
+        return redirect()->route('tasks.show', $task)
+            ->with('success', 'Task created.')
+            ->with($this->outsideTeamNotice($task));
     }
 
     public function show(Request $request, Task $task): View
@@ -94,7 +96,9 @@ class TaskController extends Controller
         $data = $request->validate(['title' => ['required', 'string', 'max:255'], 'description' => ['nullable', 'string', 'max:10000'], 'priority' => ['required', 'string', 'in:low,medium,high,urgent'], 'assignee_id' => ['nullable', 'integer', 'exists:users,id'], 'start_date' => ['nullable', 'date'], 'due_date' => ['nullable', 'date', 'after_or_equal:start_date']]);
         TaskService::updateDetails($task, $data, $request->user());
 
-        return redirect()->route('tasks.show', $task)->with('success', 'Task details updated.');
+        return redirect()->route('tasks.show', $task)
+            ->with('success', 'Task details updated.')
+            ->with($this->outsideTeamNotice($task->fresh()));
     }
 
     public function destroy(Request $request, Task $task): RedirectResponse
@@ -103,5 +107,23 @@ class TaskController extends Controller
         TaskService::delete($task, $request->user());
 
         return redirect()->route('tasks.index')->with('success', 'Task deleted.');
+    }
+
+    /**
+     * Assigning work does not grant project access — membership is always an explicit choice.
+     * When the assignee is not on the team, say so rather than enrolling them silently.
+     *
+     * @return array<string, string>
+     */
+    private function outsideTeamNotice(?Task $task): array
+    {
+        $assignee = $task?->assignee;
+
+        if (! $assignee || ! $task->project || $task->project->isMember($assignee)) {
+            return [];
+        }
+
+        return ['warning' => $assignee->name.' is not a member of '.$task->project->name
+            .'. They can still see and update this task — add them to the project team if they need the whole project.'];
     }
 }

@@ -15,7 +15,8 @@ use Illuminate\Validation\ValidationException;
 /**
  * Single entry point for task mutations. Enforces business rules:
  *  - every task belongs to a project; subtasks inherit their parent's project; one subtask level
- *  - single primary assignee; assignees & collaborators are auto-added as project members
+ *  - single primary assignee; project membership is never granted implicitly — people are
+ *    added to a project only by an explicit choice (see ProjectService::addMember)
  *  - status ⇄ progress sync (0% Pending, 1–99% In Progress, 100% Completed)
  *  - append-only update history for every status/progress/remark/assignment change
  *  - parent progress rolls up from subtasks; project progress/health recalculated
@@ -64,11 +65,6 @@ class TaskService
             $task->latest_update_by = $actor->id;
             $task->position = (int) Task::query()->where('project_id', $project->id)->where('parent_id', $parent?->id)->max('position') + 1;
             $task->save();
-
-            $project->addMember($actor, $actor);
-            if ($task->assignee_id) {
-                $project->addMember($task->assignee_id, $actor);
-            }
 
             self::record($task, $actor, TaskUpdateType::Created, null, $task->status, null, $task->progress);
 
@@ -238,7 +234,6 @@ class TaskService
                     $task, ['old_assignee_id' => $oldAssignee?->id, 'new_assignee_id' => $newAssignee?->id], $actor);
 
                 if ($newAssignee) {
-                    $task->project->addMember($newAssignee, $actor);
                     // A person can't be both the primary assignee and a collaborator.
                     $task->collaborators()->detach($newAssignee->id);
                     if ($newAssignee->id !== $actor->id) {
@@ -266,7 +261,6 @@ class TaskService
         }
 
         $task->collaborators()->attach($user->id, ['added_by' => $actor->id]);
-        $task->project->addMember($user, $actor);
 
         ActivityLogger::log('collaborator.added', 'Added '.$user->name.' as collaborator on "'.$task->title.'"', $task, ['user_id' => $user->id], $actor);
         if ($user->id !== $actor->id) {

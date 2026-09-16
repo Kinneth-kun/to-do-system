@@ -46,7 +46,7 @@ The only exception: files explicitly listed as yours in §7 (including the three
 * **Auto-delay**: Pending/In Progress tasks past their due date become Delayed (system update, notification). Picking Pending/In Progress on an overdue task keeps it Delayed. Moving the due date forward clears an automatic delay.
 * **Roll-up**: a parent's progress = average of non-cancelled subtasks (its progress field is locked in the UI). Project progress = average of top-level non-cancelled tasks.
 * **Project health** (`ProjectHealthService::evaluate($project)` → `['health' => ProjectHealth, 'reasons' => string[], 'stats' => [...]]`) with thresholds in Settings. Cached on `projects.health` / `projects.progress`.
-* **Auto membership (reduced duplicate entry)**: creator, assignee and collaborators are automatically added as project members.
+* **Membership is explicit**: people join a project only when somebody chooses to add them — on the project form's member picker, or from the project's Team panel. Assigning a task or adding a collaborator does NOT enrol anyone; the task form warns when the assignee is not on the team. An assignee keeps access to their own task either way (`Task::visibleTo` / `TaskPolicy`), but not to the rest of the project.
 * **Departments**: every user belongs to one of the seven `App\Enums\Department` cases (Human Resources, Leasing, Marketing, Security, Operations, Information Technology, Accounting). It is required on the admin user form and the profile, and identifies a task's owning department through its assignee — `Task::forDepartment()`, the department filter on My Tasks, and the "Work by department" panel on the executive dashboard.
 * **Authorization boundaries**: admins can do everything. Regular users see only projects they own/created/are members of and tasks inside them (plus tasks they're assigned/collaborating on). See policies.
 
@@ -131,6 +131,7 @@ Admin (`admin.` prefix, `admin` middleware): `admin.executive`, `admin.meeting`,
 <x-priority-badge :priority="$task->priority" :show-low="false" />
 <x-health-badge :health="$project->health" size="sm|md|lg" />
 <x-department-badge :department="$user->department" size="sm|md|lg" :short="false" />
+<x-member-picker :users="$users" :exclude="auth()->id()" />   {{-- deliberate project-member selection --}}
 <x-progress-ring :value="72" :size="120" sublabel="complete" />
 <x-project-status-badge :status="$project->status" />
 <x-progress-bar :value="$task->progress" size="xs|sm|md|lg" :show-label="true" color="indigo" />
