@@ -48,7 +48,7 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // Only set the username on creation — don't fight the unique index on re-seed.
-        if ($isNew && filled($username = env('ADMIN_USERNAME'))) {
+        if (filled($username = env('ADMIN_USERNAME'))) {
             $user->username = $username;
         }
 
