@@ -118,6 +118,49 @@ describe('update notifications', () => {
     });
 });
 
+describe('project membership', () => {
+    it('never adds administrators or executives as project members', async () => {
+        const owner = await makeUser();
+        const admin = await makeUser({ admin: true });
+        const executive = await makeUser({ executive: true });
+        const colleague = await makeUser();
+
+        const project = await ProjectService.create({ name: 'KonekPOS', memberIds: [admin.id, executive.id, colleague.id] }, owner);
+        expect(await ProjectService.addMember(project.id, executive.id, owner)).toBe(false);
+
+        const members = await db().select({ userId: schema.projectMembers.userId }).from(schema.projectMembers).where(eq(schema.projectMembers.projectId, project.id));
+        expect(members.map((m) => m.userId).sort((x, y) => x - y)).toEqual([owner.id, colleague.id].sort((x, y) => x - y));
+    });
+});
+
+describe('completed projects and post-launch work', () => {
+    it('logs work added after completion as enhancements that leave the project progress alone', async () => {
+        const { owner, project } = await setup();
+        const member = await makeUser();
+        await ProjectService.addMember(project.id, member.id, owner);
+        const build = await TaskService.create({ projectId: project.id, title: 'Build v1' }, owner);
+        await TaskService.applyUpdate(build.id, owner, 'completed', null);
+
+        await ProjectService.setStatus(project.id, 'completed', owner);
+        expect(await notificationsFor(member.id, 'project_completed')).toHaveLength(1);
+
+        const fix = await TaskService.create({ projectId: project.id, title: 'Fix login bug', category: 'bug_fix' }, owner);
+        const idea = await TaskService.create({ projectId: project.id, title: 'Dark mode' }, owner);
+        expect(fix.category).toBe('bug_fix');
+        expect(idea.category).toBe('enhancement');
+
+        await TaskService.applyUpdate(idea.id, owner, null, 10);
+        const [p] = await db().select().from(schema.projects).where(eq(schema.projects.id, project.id));
+        expect(p).toMatchObject({ status: 'completed', progress: 100, health: 'completed' });
+    });
+
+    it('keeps regular tasks on active projects uncategorised', async () => {
+        const { owner, project } = await setup();
+        const t = await TaskService.create({ projectId: project.id, title: 'Plan', category: 'update' }, owner);
+        expect(t.category).toBeNull();
+    });
+});
+
 describe('status and progress stay in sync', () => {
     it('derives status from progress and progress from status', async () => {
         const { owner, project } = await setup();

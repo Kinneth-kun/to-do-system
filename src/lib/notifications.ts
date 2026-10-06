@@ -68,7 +68,10 @@ const snippet = (text: string, length = 160) => {
  */
 async function involvedIds(task: TaskInfo, exclude: number[] = []): Promise<number[]> {
     const skip = new Set(exclude);
-    return [...(await stakeholderIds(task)), task.projectOwnerId].filter((id): id is number => !!id && !skip.has(id));
+    const ids = [...new Set([...(await stakeholderIds(task)), task.projectOwnerId].filter((id): id is number => !!id && !skip.has(id)))];
+    // The project owner may be in another department and unable to open the task.
+    const access = await taskAccess(task.id);
+    return access ? usersWhoCanViewTask(ids, access) : ids;
 }
 
 /** Assignee, creator and collaborators — the people who care about a task. */
@@ -154,6 +157,33 @@ export const Notify = {
             url: routes.project(project.id),
             subject: { type: 'project', id: project.id },
             actor,
+        });
+    },
+
+    /** The project's owner and managers hear about a new suggestion (not the person who wrote it). */
+    async suggestionAdded(project: { id: number; name: string }, recipients: number[], suggestionId: number, body: string, actor: ActorInfo) {
+        await sendNotification({
+            recipients,
+            type: 'suggestion_added',
+            title: `${who(actor)} left a suggestion on "${project.name}"`,
+            message: snippet(body),
+            url: routes.project(project.id),
+            subject: { type: 'project_suggestion', id: suggestionId },
+            actor,
+        });
+    },
+
+    /** The whole team hears that the project shipped; post-launch work is logged from now on. */
+    async projectCompleted(project: { id: number; name: string }, memberIds: number[], actor: ActorInfo) {
+        await sendNotification({
+            recipients: memberIds,
+            type: 'project_completed',
+            title: `"${project.name}" was marked completed`,
+            message: `${actor ? `By ${actor.name} · ` : ''}Log enhancements, bug fixes and updates on the project page.`,
+            url: routes.project(project.id),
+            subject: { type: 'project', id: project.id },
+            actor,
+            notifyActor: true,
         });
     },
 

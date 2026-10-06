@@ -66,6 +66,27 @@ describe('visibility', () => {
         expect(can.deleteTask(actor(assignee), access)).toBe(false);
     });
 
+    it("hides other departments' tasks from regular users unless they collaborate", async () => {
+        const itLead = await makeUser({ department: 'information_technology' });
+        const itDev = await makeUser({ department: 'information_technology' });
+        const leasing = await makeUser({ department: 'leasing' });
+        const p = await ProjectService.create({ name: 'ICM Lease', memberIds: [itDev.id, leasing.id] }, itLead);
+        await TaskService.create({ projectId: p.id, title: 'Coding', assigneeId: itLead.id }, itLead);
+        const contract = await TaskService.create({ projectId: p.id, title: 'Lease contract template', assigneeId: leasing.id }, leasing);
+
+        // Same department through the project; other department hidden.
+        expect(await visibleTaskTitles(itDev)).toEqual(['Coding']);
+        expect(await visibleTaskTitles(leasing)).toEqual(['Lease contract template']);
+        // Even the project owner (a manager) can't open another department's task…
+        expect(can.viewTask(actor(itLead), (await taskAccess(contract.id))!)).toBe(false);
+        expect(can.editTask(actor(itLead), (await taskAccess(contract.id))!)).toBe(false);
+
+        // …until they're invited as a collaborator.
+        await TaskService.addCollaborator(contract.id, itDev.id, leasing);
+        expect(await visibleTaskTitles(itDev)).toEqual(['Coding', 'Lease contract template']);
+        expect(can.updateTask(actor(itDev), (await taskAccess(contract.id))!)).toBe(true);
+    });
+
     it('gives executives the same view of every project and task as administrators', async () => {
         const owner = await makeUser();
         const executive = await makeUser({ executive: true });

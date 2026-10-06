@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { forbidden, notFound } from 'next/navigation';
-import { and, asc, count, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
-import { can, projectAccess } from '@/lib/access';
-import { deleteProjectAction } from '@/app/actions/projects';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, notInArray, sql } from 'drizzle-orm';
+import { can, projectAccess, taskVisibleTo } from '@/lib/access';
+import { deleteProjectAction, setProjectCompletedAction } from '@/app/actions/projects';
 import { requireUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
 import { addDays, formatDate, today } from '@/lib/dates';
-import { Priority, ProjectHealth, ProjectStatus } from '@/lib/enums';
+import { FULL_ACCESS_ROLES, isOpenStatus, Priority, ProjectHealth, ProjectStatus, TaskCategory } from '@/lib/enums';
 import { ProjectHealthService, taskCounts } from '@/lib/services/health';
 import { findProject } from '@/lib/services/projects';
 import { Settings } from '@/lib/settings';
@@ -52,6 +52,7 @@ export default async function ProjectPage({ params }: Props) {
             and(
                 eq(schema.tasks.projectId, project.id),
                 isNull(schema.tasks.deletedAt),
+                isNull(schema.tasks.category),
                 inArray(schema.tasks.status, ['pending', 'in_progress']),
                 sql`${schema.tasks.dueDate} between ${day} and ${addDays(day, dueSoonDays)}`,
             ),
@@ -68,20 +69,52 @@ export default async function ProjectPage({ params }: Props) {
         .where(eq(schema.projectMembers.projectId, project.id))
         .orderBy(asc(schema.projectMembers.createdAt))) as (UserLite & { role: string })[];
 
+    // Only tasks the viewer may open (other departments' tasks stay hidden unless they collaborate).
+    // The original build, and post-launch work (enhancements, bug fixes, updates) logged after
+    // the project was completed.
     const taskRows = await db()
         .select()
         .from(schema.tasks)
-        .where(and(eq(schema.tasks.projectId, project.id), isNull(schema.tasks.deletedAt)))
+        .where(and(eq(schema.tasks.projectId, project.id), isNull(schema.tasks.deletedAt), isNull(schema.tasks.category), taskVisibleTo(user)))
         .orderBy(asc(schema.tasks.position), asc(schema.tasks.id));
     const rows = await buildTaskRows(user, taskRows);
+    const postLaunchRows = await db()
+        .select()
+        .from(schema.tasks)
+        .where(and(eq(schema.tasks.projectId, project.id), isNull(schema.tasks.deletedAt), isNotNull(schema.tasks.category), taskVisibleTo(user)))
+        .orderBy(desc(schema.tasks.createdAt), desc(schema.tasks.id));
+    // Open items first, newest first within each group (the sort is stable).
+    const postLaunch = (await buildTaskRows(user, postLaunchRows)).sort((a, b) => Number(isOpenStatus(b.status)) - Number(isOpenStatus(a.status)));
+    const openPostLaunch = postLaunch.filter((t) => isOpenStatus(t.status)).length;
+    const plural: Record<string, string> = { enhancement: 'enhancements', bug_fix: 'bug fixes', update: 'updates' };
+    const byCategory = TaskCategory.values
+        .map((c) => ({ c, n: postLaunch.filter((t) => t.category === c).length }))
+        .filter(({ n }) => n > 0)
+        .map(({ c, n }) => `${n} ${n === 1 ? TaskCategory.label(c).toLowerCase() : plural[c]}`);
+    const completed = project.status === 'completed';
+    const showPostLaunch = completed || postLaunch.length > 0;
+    const canUpdate = can.updateProject(user, access);
+    const openBuild = counts.pending + counts.in_progress + counts.delayed + counts.on_hold;
+    const completeMessage =
+        openBuild > 0
+            ? `${openBuild} build ${openBuild === 1 ? 'task is' : 'tasks are'} still open and will stay as they are. From now on, new work is logged as enhancements, bug fixes and updates. The team is notified.`
+            : 'From now on, new work on this project is logged as enhancements, bug fixes and updates, without changing its progress. The team is notified.';
 
     const canManage = can.manageMembers(user, access);
     const canCreateTask = can.createTask(user, access);
+    // Administrators and executives already see every project, so they're not offered as members.
     const candidates = canManage
         ? await db()
               .select({ id: schema.users.id, name: schema.users.name })
               .from(schema.users)
-              .where(and(eq(schema.users.isActive, true), members.length ? notInArray(schema.users.id, members.map((m) => m.id)) : undefined))
+              .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId))
+              .where(
+                  and(
+                      eq(schema.users.isActive, true),
+                      notInArray(schema.roles.name, [...FULL_ACCESS_ROLES]),
+                      members.length ? notInArray(schema.users.id, members.map((m) => m.id)) : undefined,
+                  ),
+              )
               .orderBy(asc(schema.users.name))
         : [];
 
@@ -96,6 +129,7 @@ export default async function ProjectPage({ params }: Props) {
     ];
     const details: [string, string][] = [
         ['Status', ProjectStatus.label(project.status as ProjectStatus)],
+        ...(completed && project.completedAt ? [['Completed on', formatDate(project.completedAt, 'M j, Y')] as [string, string]] : []),
         ['Priority', Priority.label(project.priority as Priority)],
         ['Start date', project.startDate ? formatDate(project.startDate, 'M j, Y') : '—'],
         ['Due date', project.dueDate ? formatDate(project.dueDate, 'M j, Y') : '—'],
@@ -132,10 +166,30 @@ export default async function ProjectPage({ params }: Props) {
                     <>
                         {canCreateTask && (
                             <Link href={`/tasks/new?project_id=${project.id}`} className="btn-primary">
-                                <Icon name="plus" className="h-4 w-4" stroke={2} /> Add task
+                                <Icon name={completed ? 'sparkles' : 'plus'} className="h-4 w-4" stroke={2} /> {completed ? 'Log enhancement' : 'Add task'}
                             </Link>
                         )}
-                        {can.updateProject(user, access) && (
+                        {canUpdate && !completed && (
+                            <ConfirmForm action={setProjectCompletedAction.bind(null, project.id, true)} title="Mark project as completed" message={completeMessage} confirm="Mark as completed" danger={false}>
+                                <button type="submit" className="btn-secondary">
+                                    <Icon name="check-circle" className="h-4 w-4" /> Mark as completed
+                                </button>
+                            </ConfirmForm>
+                        )}
+                        {canUpdate && completed && (
+                            <ConfirmForm
+                                action={setProjectCompletedAction.bind(null, project.id, false)}
+                                title="Reopen project"
+                                message="The project goes back to Active. Logged enhancements and updates are kept."
+                                confirm="Reopen"
+                                danger={false}
+                            >
+                                <button type="submit" className="btn-secondary">
+                                    <Icon name="refresh" className="h-4 w-4" /> Reopen
+                                </button>
+                            </ConfirmForm>
+                        )}
+                        {canUpdate && (
                             <Link href={`/projects/${project.id}/edit`} className="btn-secondary">
                                 <Icon name="pencil" className="h-4 w-4" /> Edit
                             </Link>
@@ -155,6 +209,18 @@ export default async function ProjectPage({ params }: Props) {
                     </>
                 }
             />
+
+            {completed && (
+                <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                        <Icon name="check" className="h-5 w-5" stroke={2.5} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-emerald-900">Completed{project.completedAt ? ` on ${formatDate(project.completedAt, 'F j, Y')}` : ''}</p>
+                        <p className="text-sm text-emerald-800/80">Enhancements, bug fixes and updates are tracked below without changing the project&apos;s progress.</p>
+                    </div>
+                </div>
+            )}
 
             {/* Health & progress summary */}
             <section className="card mb-6">
@@ -186,32 +252,64 @@ export default async function ProjectPage({ params }: Props) {
             </section>
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-                <section className="card min-w-0 self-start">
-                    <div className="card-header">
-                        <div>
-                            <h2 className="card-title">Tasks</h2>
-                            <p className="mt-0.5 text-xs text-slate-500">{counts.total} {counts.total === 1 ? 'task' : 'tasks'}</p>
-                        </div>
-                        {canCreateTask && (
-                            <Link className="btn-secondary btn-sm" href={`/tasks/new?project_id=${project.id}`}>
-                                <Icon name="plus" className="h-3.5 w-3.5" stroke={2} /> Add task
-                            </Link>
-                        )}
-                    </div>
-                    <div className="divide-y divide-slate-100">
-                        {rows.length ? (
-                            rows.map((task) => <TaskRow key={task.id} task={task} showProject={false} />)
-                        ) : (
-                            <EmptyState icon="tasks" title="No tasks yet" description="Add the first task to start tracking progress.">
-                                {canCreateTask && (
-                                    <Link href={`/tasks/new?project_id=${project.id}`} className="btn-primary btn-sm">
-                                        Add task
-                                    </Link>
+                <div className="min-w-0 space-y-6 self-start">
+                    {showPostLaunch && (
+                        <section className="card min-w-0" id="enhancements">
+                            <div className="card-header flex-wrap gap-3">
+                                <div>
+                                    <h2 className="card-title flex items-center gap-2">
+                                        <Icon name="sparkles" className="h-4 w-4 text-violet-500" /> Enhancements &amp; updates
+                                    </h2>
+                                    <p className="mt-0.5 text-xs text-slate-500">
+                                        {postLaunch.length ? [`${openPostLaunch} open`, `${postLaunch.length - openPostLaunch} done`, ...byCategory].join(' · ') : 'Post-launch work on the finished project'}
+                                    </p>
+                                </div>
+                                {canCreateTask && completed && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {TaskCategory.options().map((o) => (
+                                            <Link key={o.value} className="btn-secondary btn-sm" href={`/tasks/new?project_id=${project.id}&category=${o.value}`}>
+                                                <Icon name="plus" className="h-3.5 w-3.5" stroke={2} /> {o.label}
+                                            </Link>
+                                        ))}
+                                    </div>
                                 )}
-                            </EmptyState>
-                        )}
-                    </div>
-                </section>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                                {postLaunch.length ? (
+                                    postLaunch.map((task) => <TaskRow key={task.id} task={task} showProject={false} />)
+                                ) : (
+                                    <EmptyState icon="sparkles" title="Nothing logged yet" description="Software is never really finished. Log the next enhancement, bug fix or update here." />
+                                )}
+                            </div>
+                        </section>
+                    )}
+                    <section className="card min-w-0">
+                        <div className="card-header">
+                            <div>
+                                <h2 className="card-title">{showPostLaunch ? 'Original build' : 'Tasks'}</h2>
+                                <p className="mt-0.5 text-xs text-slate-500">{counts.total} {counts.total === 1 ? 'task' : 'tasks'}</p>
+                            </div>
+                            {canCreateTask && !completed && (
+                                <Link className="btn-secondary btn-sm" href={`/tasks/new?project_id=${project.id}`}>
+                                    <Icon name="plus" className="h-3.5 w-3.5" stroke={2} /> Add task
+                                </Link>
+                            )}
+                        </div>
+                        <div className="divide-y divide-slate-100">
+                            {rows.length ? (
+                                rows.map((task) => <TaskRow key={task.id} task={task} showProject={false} />)
+                            ) : (
+                                <EmptyState icon="tasks" title="No tasks yet" description={completed ? 'This project was completed without build tasks.' : 'Add the first task to start tracking progress.'}>
+                                    {canCreateTask && !completed && (
+                                        <Link href={`/tasks/new?project_id=${project.id}`} className="btn-primary btn-sm">
+                                            Add task
+                                        </Link>
+                                    )}
+                                </EmptyState>
+                            )}
+                        </div>
+                    </section>
+                </div>
 
                 <aside className="space-y-6">
                     <section className="card self-start" id="members">

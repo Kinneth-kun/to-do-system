@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { Department, Priority, ProjectHealth, ProjectStatus, TaskStatus, taskStatusColor } from '@/lib/enums';
+import { Department, Priority, ProjectHealth, ProjectStatus, TaskCategory, TaskStatus, taskStatusColor } from '@/lib/enums';
 import type { DueState } from '@/lib/task-utils';
 import { Icon } from './icon';
 
@@ -81,6 +81,18 @@ export function PriorityBadge({ priority, showLow = true }: { priority: string |
         <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-${c}-50 text-${c}-700`}>
             <Icon name="flag" className="h-3 w-3" stroke={2} />
             {Priority.label(priority)}
+        </span>
+    );
+}
+
+/** Enhancement / Bug fix / Update — post-launch work on a completed project. */
+export function CategoryBadge({ category, className }: { category: string | null | undefined; className?: string }) {
+    if (!TaskCategory.is(category)) return null;
+    const { color, icon, label } = TaskCategory.meta[category];
+    return (
+        <span className={cx(`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-medium whitespace-nowrap bg-${color}-50 text-${color}-700`, className)}>
+            <Icon name={icon} className="h-3 w-3" stroke={2} />
+            {label}
         </span>
     );
 }
@@ -257,10 +269,63 @@ export function PageHeader({ title, description, back, meta, actions, className 
 }
 
 /** Page links for paginated lists (Laravel's ->links()). */
-export function Pagination({ page, lastPage, total, perPage, href }: { page: number; lastPage: number; total: number; perPage: number; href: (page: number) => string }) {
+function CompactPagination({ page, lastPage, total, from, to, href }: { page: number; lastPage: number; total: number; from: number; to: number; href: (page: number) => string }) {
+    const item = 'inline-flex h-7 w-7 items-center justify-center rounded-lg';
+    return (
+        <nav className="flex items-center justify-between gap-3" aria-label="Pagination">
+            <p className="text-xs text-slate-500 tabular-nums">
+                <span className="font-medium text-slate-700">
+                    {from}–{to}
+                </span>{' '}
+                of {total}
+            </p>
+            <div className="flex items-center gap-1">
+                {page > 1 ? (
+                    <Link href={href(page - 1)} className={cx(item, 'text-slate-600 hover:bg-slate-100')} aria-label="Previous page">
+                        <Icon name="chevron-left" className="h-4 w-4" />
+                    </Link>
+                ) : (
+                    <span className={cx(item, 'text-slate-300')}>
+                        <Icon name="chevron-left" className="h-4 w-4" />
+                    </span>
+                )}
+                <span className="px-1 text-xs text-slate-500 tabular-nums">
+                    {page} / {lastPage}
+                </span>
+                {page < lastPage ? (
+                    <Link href={href(page + 1)} className={cx(item, 'text-slate-600 hover:bg-slate-100')} aria-label="Next page">
+                        <Icon name="chevron-right" className="h-4 w-4" />
+                    </Link>
+                ) : (
+                    <span className={cx(item, 'text-slate-300')}>
+                        <Icon name="chevron-right" className="h-4 w-4" />
+                    </span>
+                )}
+            </div>
+        </nav>
+    );
+}
+
+export function Pagination({
+    page,
+    lastPage,
+    total,
+    perPage,
+    href,
+    compact = false,
+}: {
+    page: number;
+    lastPage: number;
+    total: number;
+    perPage: number;
+    href: (page: number) => string;
+    /** For narrow cards: "1–6 of 9" and the controls on one line. */
+    compact?: boolean;
+}) {
     if (lastPage <= 1) return null;
     const from = (page - 1) * perPage + 1;
     const to = Math.min(total, page * perPage);
+    if (compact) return <CompactPagination page={page} lastPage={lastPage} total={total} from={from} to={to} href={href} />;
     const pages: (number | '…')[] = [];
     for (let p = 1; p <= lastPage; p++) {
         if (p === 1 || p === lastPage || Math.abs(p - page) <= 1) pages.push(p);

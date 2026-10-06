@@ -109,6 +109,19 @@ export const projectMembers = pgTable(
     (t) => [uniqueIndex('project_members_project_user_unique').on(t.projectId, t.userId), index('project_members_user_index').on(t.userId)],
 );
 
+/** Recommendations and suggestions people leave on a project (shown on its card, newest first). */
+export const projectSuggestions = pgTable(
+    'project_suggestions',
+    {
+        id: serial('id').primaryKey(),
+        projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+        userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
+        body: text('body').notNull(),
+        ...timestamps,
+    },
+    (t) => [index('project_suggestions_project_created_index').on(t.projectId, t.createdAt)],
+);
+
 export const tasks = pgTable(
     'tasks',
     {
@@ -117,6 +130,9 @@ export const tasks = pgTable(
         projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
         title: varchar('title', { length: 255 }).notNull(),
         description: text('description'),
+        // Null = a regular (build) task. Otherwise a post-launch item on a completed project:
+        // enhancement | bug_fix | update (TaskCategory). These don't affect project progress.
+        category: varchar('category', { length: 20 }),
         status: varchar('status', { length: 20 }).notNull().default('pending'),
         statusBeforeDelay: varchar('status_before_delay', { length: 20 }),
         priority: varchar('priority', { length: 20 }).notNull().default('medium'),
@@ -141,6 +157,7 @@ export const tasks = pgTable(
         index('tasks_priority_index').on(t.priority),
         index('tasks_due_date_index').on(t.dueDate),
         index('tasks_project_index').on(t.projectId),
+        index('tasks_project_category_index').on(t.projectId, t.category),
         index('tasks_assignee_status_index').on(t.assigneeId, t.status),
         index('tasks_created_by_index').on(t.createdBy),
     ],

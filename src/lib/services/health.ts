@@ -1,4 +1,4 @@
-import { and, avg, count, eq, inArray, isNull, lt, ne } from 'drizzle-orm';
+import { and, avg, count, eq, inArray, isNotNull, isNull, lt, ne } from 'drizzle-orm';
 import { db, schema } from '../db';
 import { addDays, diffInDays, formatDate, now, today } from '../dates';
 import { ProjectStatus, TaskStatus, type ProjectHealth } from '../enums';
@@ -36,12 +36,15 @@ export type HealthStats = {
 
 export type HealthEvaluation = { health: ProjectHealth; reasons: string[]; stats: HealthStats };
 
-/** Task counts keyed by status, plus `total` (live tasks). */
-export async function taskCounts(projectId: number): Promise<Record<TaskStatus | 'total', number>> {
+/**
+ * Task counts keyed by status, plus `total` (live tasks). By default only the build tasks — the
+ * post-launch items of a completed project are counted separately (`postLaunch: true`).
+ */
+export async function taskCounts(projectId: number, postLaunch = false): Promise<Record<TaskStatus | 'total', number>> {
     const rows = await db()
         .select({ status: tasks.status, c: count() })
         .from(tasks)
-        .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt)))
+        .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), postLaunch ? isNotNull(tasks.category) : isNull(tasks.category)))
         .groupBy(tasks.status);
     const result = Object.fromEntries(TaskStatus.values.map((s) => [s, 0])) as Record<TaskStatus | 'total', number>;
     for (const row of rows) if (TaskStatus.is(row.status)) result[row.status] = Number(row.c);
@@ -64,12 +67,12 @@ export const ProjectHealthService = {
         return { ...project, progress, health };
     },
 
-    /** Average progress of the project's non-cancelled tasks. */
+    /** Average progress of the project's non-cancelled build tasks (post-launch items excluded). */
     async calculateProgress(projectId: number): Promise<number> {
         const [row] = await db()
             .select({ value: avg(tasks.progress) })
             .from(tasks)
-            .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), ne(tasks.status, 'cancelled')));
+            .where(and(eq(tasks.projectId, projectId), isNull(tasks.deletedAt), isNull(tasks.category), ne(tasks.status, 'cancelled')));
         return Math.round(Number(row?.value ?? 0));
     },
 
@@ -87,6 +90,7 @@ export const ProjectHealthService = {
                 and(
                     eq(tasks.projectId, project.id),
                     isNull(tasks.deletedAt),
+                    isNull(tasks.category),
                     inArray(tasks.status, ['pending', 'in_progress']),
                     lt(tasks.dueDate, day),
                 ),

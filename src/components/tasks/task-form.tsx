@@ -1,30 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { Priority } from '@/lib/enums';
+import { useCallback, useState } from 'react';
+import { Priority, TaskCategory } from '@/lib/enums';
 import type { FormState } from '@/lib/validation';
 import { ActionForm, Input, Select, SubmitButton, Textarea, useFieldError, useOld } from '../client/form';
+import { Icon } from '../icon';
 import { ProjectPicker, type ProjectOption } from '../shell/project-picker';
 import { DueDatePresets, TaskKindToggle, type TaskKind } from './task-kind';
 
 type TaskDefaults = {
     title?: string;
     description?: string | null;
+    /** Post-launch type, when editing one. */
+    category?: string | null;
     priority?: string;
     startDate?: string | null;
     dueDate?: string | null;
 };
 
-function ProjectField({ projects, projectId }: { projects: ProjectOption[]; projectId: number | null }) {
-    const selected = useOld('project_id', projectId ? String(projectId) : '') as string;
+function ProjectField({ projects, selected, onChange }: { projects: ProjectOption[]; selected: string; onChange: (projectId: string) => void }) {
     const error = useFieldError('project_id');
     return (
         <div className="mb-5">
             <label htmlFor="project_id" className="form-label">
                 Project <span className="text-red-500">*</span>
             </label>
-            <ProjectPicker projects={projects} selected={selected || null} error={error} />
+            <ProjectPicker projects={projects} selected={selected || null} onChange={onChange} error={error} />
             <p className="form-help">Need a new one? Create it here without losing what you&apos;ve typed.</p>
             {error && <p className="form-error">{error}</p>}
         </div>
@@ -60,14 +62,37 @@ export function TaskForm({
     const [kind, setKind] = useState<TaskKind>(oldKind === 'standalone' ? 'standalone' : 'project');
     const isStandalone = create ? kind === 'standalone' : standalone;
 
+    // A task added to a completed project is post-launch work: it gets a type instead of
+    // counting toward the finished project's progress.
+    const oldProject = useOld('project_id', create?.projectId ? String(create.projectId) : '') as string;
+    const [projectId, setProjectId] = useState(oldProject);
+    const onProjectChange = useCallback((value: string) => setProjectId(value), []);
+    const postLaunch = create ? kind === 'project' && !!create.projects.find((p) => String(p.id) === projectId)?.completed : !!defaults.category;
+
     return (
         <ActionForm action={action} className="card">
             <div className="card-body">
                 {create && (
                     <>
                         <TaskKindToggle value={kind} onChange={setKind} />
-                        {kind === 'project' && <ProjectField projects={create.projects} projectId={create.projectId} />}
+                        {kind === 'project' && <ProjectField projects={create.projects} selected={projectId} onChange={onProjectChange} />}
                     </>
+                )}
+                {postLaunch && (
+                    <div className="mb-5 grid gap-4 rounded-xl border border-violet-200 bg-violet-50/60 p-4 sm:grid-cols-[minmax(0,1fr)_14rem] sm:items-end">
+                        <div className="flex items-start gap-3">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-600 text-white">
+                                <Icon name="sparkles" className="h-5 w-5" />
+                            </span>
+                            <div>
+                                <p className="text-sm font-semibold text-slate-900">Post-launch work</p>
+                                <p className="mt-0.5 text-xs leading-relaxed text-slate-600">
+                                    This project is completed, so this is logged under Enhancements &amp; updates. It won&apos;t change the project&apos;s progress.
+                                </p>
+                            </div>
+                        </div>
+                        <Select name="category" label="Type" options={TaskCategory.options()} defaultValue={defaults.category ?? 'enhancement'} required />
+                    </div>
                 )}
                 <div className="grid gap-5 sm:grid-cols-2">
                     <Input name="title" label="Title" defaultValue={defaults.title} required maxLength={255} wrapperClassName="sm:col-span-2" />

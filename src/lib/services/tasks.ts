@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, max } from 'drizzle-orm';
 import { db, schema, transaction } from '../db';
 import { logActivity } from '../activity';
 import { formatDate, now, today } from '../dates';
-import { canAutoDelay, statusFromProgress, TaskStatus, type Priority } from '../enums';
+import { canAutoDelay, statusFromProgress, TaskCategory, TaskStatus, type Priority } from '../enums';
 import { ValidationError } from '../errors';
 import { loadTaskInfo, Notify } from '../notifications';
 import { Settings } from '../settings';
@@ -12,6 +12,8 @@ import { ProjectHealthService } from './health';
 /*
  * Single entry point for task mutations. Enforces the business rules:
  *  - a task belongs to a project, or stands alone (short-term work with no project)
+ *  - tasks added to a completed project are post-launch items (enhancement / bug fix / update)
+ *    and don't change the finished project's progress
  *  - single primary assignee; project membership is never granted implicitly — people join a
  *    project only by an explicit choice (ProjectService.addMember)
  *  - status ⇄ progress sync (0% Pending, 1–99% In Progress, 100% Completed)
@@ -29,6 +31,8 @@ type CreateData = {
     projectId?: number | null;
     title: string;
     description?: string | null;
+    /** Post-launch type; only used when the project is completed. */
+    category?: TaskCategory | null;
     priority?: Priority | null;
     assigneeId?: number | null;
     startDate?: string | null;
@@ -38,7 +42,7 @@ type CreateData = {
     collaboratorIds?: number[];
 };
 
-type DetailsData = Partial<Pick<TaskRow, 'title' | 'description' | 'priority' | 'startDate' | 'dueDate' | 'assigneeId'>>;
+type DetailsData = Partial<Pick<TaskRow, 'title' | 'description' | 'category' | 'priority' | 'startDate' | 'dueDate' | 'assigneeId'>>;
 
 async function findTask(id: number): Promise<TaskRow | null> {
     const [row] = await db().select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).limit(1);
@@ -67,6 +71,9 @@ export const TaskService = {
                 if (!project) throw ValidationError.withMessages({ project_id: 'The selected project is invalid.' });
             }
 
+            // Work added after the project is completed is a post-launch item, never a build task.
+            const category = project?.status === 'completed' ? (data.category ?? 'enhancement') : null;
+
             const requestedProgress = clampProgress(data.progress ?? 0);
             const requestedStatus = data.status ? data.status : statusFromProgress(requestedProgress);
             const [status, progress] = normalize(requestedStatus, requestedProgress);
@@ -83,6 +90,7 @@ export const TaskService = {
                     projectId: project?.id ?? null,
                     title: data.title,
                     description: data.description ?? null,
+                    category,
                     priority: data.priority ?? 'medium',
                     assigneeId: data.assigneeId ?? null,
                     startDate: data.startDate ?? null,
@@ -103,7 +111,7 @@ export const TaskService = {
 
             await logActivity(
                 'task.created',
-                `Created task "${task.title}"${project ? ` in ${project.name}` : ' (standalone)'}`,
+                `Created ${category ? TaskCategory.label(category).toLowerCase() : 'task'} "${task.title}"${project ? ` in ${project.name}` : ' (standalone)'}`,
                 { type: 'task', id: task.id },
                 { project_id: project?.id ?? null },
                 actor.id,
@@ -240,6 +248,7 @@ export const TaskService = {
             const fieldNames: Record<keyof DetailsData, string> = {
                 title: 'title',
                 description: 'description',
+                category: 'type',
                 priority: 'priority',
                 startDate: 'start_date',
                 dueDate: 'due_date',

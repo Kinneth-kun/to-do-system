@@ -4,6 +4,7 @@ import { logActivity } from '../activity';
 import { now } from '../dates';
 import { PROJECT_COLORS, ProjectStatus, type Priority, type ProjectMemberRole, type ProjectStatus as ProjectStatusValue } from '../enums';
 import { Notify } from '../notifications';
+import { isFullAccessUser } from '../users';
 import { ProjectHealthService, type ProjectRow } from './health';
 import type { Actor } from './tasks';
 
@@ -131,6 +132,10 @@ export const ProjectService = {
                     { old_status: project.status, new_status: updated.status },
                     actor.id,
                 );
+                if (updated.status === 'completed') {
+                    const members = await db().select({ id: projectMembers.userId }).from(projectMembers).where(eq(projectMembers.projectId, updated.id));
+                    await Notify.projectCompleted(updated, [updated.ownerId, ...members.map((m) => m.id)], actor);
+                }
             }
             await logActivity('project.updated', `Updated project "${updated.name}" (${changed.join(', ')})`, { type: 'project', id: updated.id }, { fields: changed }, actor.id);
 
@@ -138,7 +143,9 @@ export const ProjectService = {
         });
     },
 
+    /** Administrators and executives are never added: they already see every project. */
     async addMember(projectId: number, userId: number, actor: Actor, role: ProjectMemberRole = 'member', log = true): Promise<boolean> {
+        if (await isFullAccessUser(userId)) return false;
         if (!(await attachMember(projectId, userId, actor.id, role))) return false;
         const project = (await findProject(projectId))!;
 
@@ -184,6 +191,11 @@ export const ProjectService = {
             actor.id,
         );
         return true;
+    },
+
+    /** "Mark as completed" (and "Reopen") from the project page: only the status changes. */
+    async setStatus(projectId: number, status: ProjectStatusValue, actor: Actor): Promise<ProjectRow> {
+        return ProjectService.update(projectId, { status }, actor);
     },
 
     async delete(projectId: number, actor: Actor): Promise<void> {

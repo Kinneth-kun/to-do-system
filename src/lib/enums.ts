@@ -64,6 +64,19 @@ export const ProjectStatus = defineEnum({
 });
 export type ProjectStatus = (typeof ProjectStatus.values)[number];
 
+/* ------------------------------------------------------------------ Task category (post-launch work) */
+
+/**
+ * Work logged on a project after it is completed — software is never really "done". A task with
+ * a category is a post-launch item; a task without one is part of the original build.
+ */
+export const TaskCategory = defineEnum({
+    enhancement: { label: 'Enhancement', color: 'violet', icon: 'sparkles' },
+    bug_fix: { label: 'Bug fix', color: 'rose', icon: 'alert' },
+    update: { label: 'Update', color: 'sky', icon: 'refresh' },
+});
+export type TaskCategory = (typeof TaskCategory.values)[number];
+
 /* ------------------------------------------------------------------ Project health */
 
 export const ProjectHealth = defineEnum({
@@ -110,6 +123,8 @@ export const NotificationType = defineEnum({
     mentioned: { label: 'Mentioned you', icon: 'at', color: 'sky' },
     comment_added: { label: 'New comment', icon: 'chat', color: 'sky' },
     task_updated: { label: 'Task updated', icon: 'pencil', color: 'indigo' },
+    project_completed: { label: 'Project completed', icon: 'check-circle', color: 'emerald' },
+    suggestion_added: { label: 'New suggestion', icon: 'chat', color: 'amber' },
     attachment_added: { label: 'File attached', icon: 'paperclip', color: 'slate' },
     daily_digest: { label: 'Daily briefing', icon: 'sparkles', color: 'violet' },
 });

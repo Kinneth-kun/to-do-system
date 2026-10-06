@@ -16,6 +16,14 @@ All mutations go through the services in `src/lib/services/`, which enforce thes
   Its creator, assignee, collaborators and admins can see it. The task forms offer "Part of a
   project" / "Standalone task" plus due-date shortcuts (Today, Tomorrow, 3 days, 1 week), and
   `?project_id=standalone` filters My Tasks and the calendar.
+- **Completed projects and post-launch work:** owners/managers can **Mark as completed** (or
+  **Reopen**) from the project page; the team is notified. Tasks added to a completed project are
+  post-launch items (`tasks.category`: enhancement, bug fix or update), listed under
+  "Enhancements & updates". They work like any task but are excluded from the project's progress,
+  health and build-task counts.
+- **Project suggestions** (`project_suggestions`): anyone who can see a project can leave a
+  recommendation on its card (Projects list), shown one at a time, newest first. The author, the
+  project's owner/managers and admins/executives can remove one; owner and managers are notified.
 - **Single primary assignee** (`tasks.assignee_id`) — always the person who created the task; the
   task forms have no assignee field. Collaborators are separate (`task_collaborators`); the
   assignee is never also a collaborator.
@@ -31,11 +39,16 @@ All mutations go through the services in `src/lib/services/`, which enforce thes
   On Track, from rules whose thresholds are admin settings. Cached on `projects.health` and
   `projects.progress`.
 - **Membership is explicit:** people join a project only when someone adds them (project form or
-  Team panel). Adding a collaborator doesn't enrol anyone. A collaborator can still open the
+  Team panel). Administrators and executives are never added as members or collaborators — they
+  already see everything. Adding a collaborator doesn't enrol anyone. A collaborator can still open the
   task, but not the rest of the project.
 - **Departments:** every user belongs to one of eight departments (Executive, HR, Leasing, Marketing,
   Security, Operations, IT, Accounting), which identifies a task's
   owning department through its assignee (My Tasks filter, executive dashboard breakdown).
+- **Department walls:** a task's department is its assignee's (else its creator's). Regular users
+  see — and, as project managers, manage — only their own department's tasks in their projects;
+  another department's task is reachable only by its creator, assignee or collaborators
+  (`taskVisibleTo`, `can.*Task`). Project progress and counts still include every task.
 - **Authorization:** administrators can do everything. Executives have the same oversight
   (every project and task, executive dashboard, activity logs) but cannot use Meeting Mode,
   manage users or change settings (`requireAdmin` vs `requireFullAccess`; policies check `fullAccess`). Regular users see projects they own,

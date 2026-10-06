@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from './db';
 import { AVATAR_COLORS, FULL_ACCESS_ROLES, ROLE_ADMIN, ROLE_EXECUTIVE, ROLE_USER, type Department, type RoleName } from './enums';
 import { now } from './dates';
@@ -48,6 +48,20 @@ export async function usersByIds(ids: number[]): Promise<Map<number, UserLite>> 
 
 export async function activeUsers(): Promise<UserLite[]> {
     const rows = await db().select(userLiteColumns).from(schema.users).where(eq(schema.users.isActive, true)).orderBy(schema.users.name);
+    return rows as UserLite[];
+}
+
+/**
+ * Active users who can be added to a project team or as a collaborator — everyone except
+ * administrators and executives, who already see every project and task.
+ */
+export async function assignableUsers(): Promise<UserLite[]> {
+    const rows = await db()
+        .select(userLiteColumns)
+        .from(schema.users)
+        .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId))
+        .where(and(eq(schema.users.isActive, true), notInArray(schema.roles.name, [...FULL_ACCESS_ROLES])))
+        .orderBy(schema.users.name);
     return rows as UserLite[];
 }
 

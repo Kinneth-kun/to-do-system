@@ -7,7 +7,7 @@ import { logActivity } from '@/lib/activity';
 import { requireUser, type CurrentUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
 import { now } from '@/lib/dates';
-import { Priority, TaskStatus } from '@/lib/enums';
+import { Priority, TaskCategory, TaskStatus } from '@/lib/enums';
 import { ValidationError } from '@/lib/errors';
 import { done, flash } from '@/lib/flash';
 import { loadTaskInfo, Notify } from '@/lib/notifications';
@@ -52,6 +52,8 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     const projectId = standalone ? null : v.int('project_id');
     const title = v.string('title', { required: true, max: 255 });
     const description = v.string('description', { max: 10000, keepWhitespace: true });
+    // Only used when the project is completed (post-launch item); ignored otherwise.
+    const category = v.oneOf('category', TaskCategory.values);
     const priority = v.oneOf('priority', Priority.values, { required: true });
     const startDate = v.date('start_date');
     const dueDate = v.date('due_date', { afterOrEqual: 'start_date' });
@@ -72,7 +74,7 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     try {
         const task = await TaskService.create(
             // The creator owns the task: it is assigned to them automatically.
-            { projectId, title: title!, description, priority, assigneeId: user.id, startDate, dueDate, status, progress, collaboratorIds },
+            { projectId, title: title!, description, category, priority, assigneeId: user.id, startDate, dueDate, status, progress, collaboratorIds },
             user,
         );
         taskId = task.id;
@@ -92,13 +94,18 @@ export async function updateTaskAction(taskId: number, _: FormState, formData: F
     const v = new Validator(formData);
     const title = v.string('title', { required: true, max: 255 });
     const description = v.string('description', { max: 10000, keepWhitespace: true });
+    const category = v.oneOf('category', TaskCategory.values);
     const priority = v.oneOf('priority', Priority.values, { required: true });
     const startDate = v.date('start_date');
     const dueDate = v.date('due_date', { afterOrEqual: 'start_date' });
     if (v.fails()) return v.state();
 
+    // A post-launch item can switch type (enhancement ⇄ bug fix ⇄ update); a build task stays one.
+    const [current] = await db().select({ category: schema.tasks.category }).from(schema.tasks).where(eq(schema.tasks.id, taskId));
+    const nextCategory = current?.category && category ? { category } : {};
+
     // The assignee is not editable: it stays the person who created the task.
-    await TaskService.updateDetails(taskId, { title: title!, description, priority: priority!, startDate, dueDate }, user);
+    await TaskService.updateDetails(taskId, { title: title!, description, ...nextCategory, priority: priority!, startDate, dueDate }, user);
 
     await flash('success', 'Task details updated.');
     redirect(`/tasks/${taskId}`);

@@ -13,9 +13,11 @@ import { requestMeta } from './request-context';
  *   user.created|updated|activated|deactivated|unlocked|password_reset|role_changed
  *   settings.updated, profile.password_changed
  *
+ *   suggestion.added|deleted
+ *
  * `actorId` is the person who did it; null means the system (or nobody signed in yet).
  */
-export type Subject = { type: 'user' | 'project' | 'task' | 'task_comment' | 'task_update' | 'attachment'; id: number } | null;
+export type Subject = { type: 'user' | 'project' | 'project_suggestion' | 'task' | 'task_comment' | 'task_update' | 'attachment'; id: number } | null;
 
 export async function logActivity(
     action: string,
@@ -60,6 +62,8 @@ const ACTIVITY_META: Record<string, ActivityMeta> = {
     'project.member_added': { label: 'Added to a project team', icon: 'user-plus', color: 'indigo' },
     'project.member_removed': { label: 'Removed from a project team', icon: 'users', color: 'slate' },
     'project.member_role_changed': { label: 'Team role changed', icon: 'users', color: 'indigo' },
+    'suggestion.added': { label: 'Suggestion added', icon: 'chat', color: 'amber' },
+    'suggestion.deleted': { label: 'Suggestion removed', icon: 'trash', color: 'slate' },
 
     'task.created': { label: 'Task created', icon: 'plus', color: 'blue' },
     'task.updated': { label: 'Task edited', icon: 'pencil', color: 'blue' },
@@ -100,7 +104,7 @@ export function activityMeta(action: string): ActivityMeta {
 export const ACTIVITY_GROUPS = {
     tasks: { label: 'Tasks', prefixes: ['task.', 'collaborator.'] },
     comments: { label: 'Comments & files', prefixes: ['comment.', 'attachment.'] },
-    projects: { label: 'Projects', prefixes: ['project.'] },
+    projects: { label: 'Projects & suggestions', prefixes: ['project.', 'suggestion.'] },
     signins: { label: 'Sign-ins', prefixes: ['auth.'] },
     accounts: { label: 'Accounts & passwords', prefixes: ['user.', 'profile.'] },
     settings: { label: 'Settings', prefixes: ['settings.'] },

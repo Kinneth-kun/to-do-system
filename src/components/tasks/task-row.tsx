@@ -5,7 +5,7 @@ import { useCallback, useState } from 'react';
 import { TaskStatus, taskStatusColor } from '@/lib/enums';
 import type { TaskRowData } from '@/lib/views';
 import { Icon } from '../icon';
-import { Avatar, DepartmentBadge, DueDate, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '../ui';
+import { Avatar, CategoryBadge, DepartmentBadge, DueDate, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '../ui';
 import { QuickUpdate } from './quick-update';
 
 /** One task in a list, with an inline quick update. Wrap lists in `card divide-y divide-slate-100`. */
@@ -42,6 +42,7 @@ export function TaskRow({
                         >
                             {task.title}
                         </Link>
+                        <CategoryBadge category={task.category} />
                         {(task.priority === 'high' || task.priority === 'urgent') && <PriorityBadge priority={task.priority} />}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">

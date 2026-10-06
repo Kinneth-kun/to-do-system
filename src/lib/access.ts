@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { db, schema } from './db';
-import { FULL_ACCESS_ROLES } from './enums';
+import { FULL_ACCESS_ROLES, type RoleName } from './enums';
 
 /*
  * Authorization. Ported from ProjectPolicy, TaskPolicy and Gate::before (admins pass everything).
@@ -12,8 +12,11 @@ import { FULL_ACCESS_ROLES } from './enums';
 
 const { projects, tasks, projectMembers, taskCollaborators } = schema;
 
-/** `fullAccess`: administrators and executives see and manage every project and task. */
-export type Actor = { id: number; fullAccess: boolean };
+/**
+ * `fullAccess`: administrators and executives see and manage every project and task.
+ * `department`: regular users only reach their own department's tasks through a project.
+ */
+export type Actor = { id: number; fullAccess: boolean; department?: string | null };
 
 /* ------------------------------------------------------------------ Scopes */
 
@@ -23,10 +26,17 @@ export function projectVisibleTo(user: Actor): SQL | undefined {
     return sql`(${projects.ownerId} = ${user.id} or ${projects.createdBy} = ${user.id} or exists (select 1 from project_members pm where pm.project_id = ${projects.id} and pm.user_id = ${user.id}))`;
 }
 
-/** Tasks in projects visible to the user, plus tasks they created, are assigned to or collaborate on. */
+/**
+ * A task's department is its assignee's (falling back to its creator's). Regular users see their
+ * own department's tasks in projects they belong to, plus any task they created, are assigned to
+ * or collaborate on — other departments' tasks only when invited as a collaborator.
+ */
 export function taskVisibleTo(user: Actor): SQL | undefined {
     if (user.fullAccess) return undefined;
-    return sql`(exists (select 1 from projects p where p.id = ${tasks.projectId} and p.deleted_at is null and (p.owner_id = ${user.id} or p.created_by = ${user.id} or exists (select 1 from project_members pm where pm.project_id = p.id and pm.user_id = ${user.id})))
+    const sameDepartment = user.department
+        ? sql`exists (select 1 from users du where du.id = coalesce(${tasks.assigneeId}, ${tasks.createdBy}) and du.department = ${user.department})`
+        : sql`false`;
+    return sql`((${sameDepartment} and exists (select 1 from projects p where p.id = ${tasks.projectId} and p.deleted_at is null and (p.owner_id = ${user.id} or p.created_by = ${user.id} or exists (select 1 from project_members pm where pm.project_id = p.id and pm.user_id = ${user.id}))))
         or ${tasks.assigneeId} = ${user.id}
         or ${tasks.createdBy} = ${user.id}
         or exists (select 1 from task_collaborators tc where tc.task_id = ${tasks.id} and tc.user_id = ${user.id}))`;
@@ -46,6 +56,8 @@ export type ProjectAccess = { id: number; ownerId: number; createdBy: number; ro
 
 export type TaskAccess = {
     id: number;
+    /** The owning department: the assignee's, or the creator's when unassigned. */
+    department: string | null;
     assigneeId: number | null;
     createdBy: number;
     collaboratorIds: Set<number>;
@@ -82,9 +94,14 @@ export async function loadTaskAccess(rows: TaskAccessSource[]): Promise<Map<numb
         .select({ taskId: taskCollaborators.taskId, userId: taskCollaborators.userId })
         .from(taskCollaborators)
         .where(inArray(taskCollaborators.taskId, rows.map((t) => t.id)));
+    const ownerIds = [...new Set(rows.map((t) => t.assigneeId ?? t.createdBy))];
+    const departments = new Map(
+        (await db().select({ id: schema.users.id, department: schema.users.department }).from(schema.users).where(inArray(schema.users.id, ownerIds))).map((u) => [u.id, u.department]),
+    );
     for (const t of rows) {
         result.set(t.id, {
             id: t.id,
+            department: departments.get(t.assigneeId ?? t.createdBy) ?? null,
             assigneeId: t.assigneeId,
             createdBy: t.createdBy,
             collaboratorIds: new Set(),
@@ -114,6 +131,8 @@ export async function projectAccess(projectId: number): Promise<ProjectAccess | 
 
 export const isProjectMember = (p: ProjectAccess, userId: number) => p.ownerId === userId || p.roles.has(userId);
 export const isProjectManager = (p: ProjectAccess, userId: number) => p.ownerId === userId || p.roles.get(userId) === 'manager';
+/** Project membership only reaches tasks of the user's own department. */
+const sameDepartment = (u: Actor, t: TaskAccess) => !!u.department && u.department === t.department;
 
 export const can = {
     /* Projects — any user can create; owner & managers edit and manage members; only the owner deletes. */
@@ -123,27 +142,27 @@ export const can = {
     createTask: (u: Actor, p: ProjectAccess) => can.viewProject(u, p),
     deleteProject: (u: Actor, p: ProjectAccess) => u.fullAccess || p.ownerId === u.id,
 
-    /* Tasks */
+    /* Tasks — project roles only reach tasks of the user's own department (see taskVisibleTo). */
     viewTask: (u: Actor, t: TaskAccess) =>
-        u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && can.viewProject(u, t.project)),
+        u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && sameDepartment(u, t) && can.viewProject(u, t.project)),
     /** Quick update (status / progress / remark). */
     updateTask: (u: Actor, t: TaskAccess) =>
-        u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && isProjectManager(t.project, u.id)),
+        u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
     /** Change details, assignee and dates. */
-    editTask: (u: Actor, t: TaskAccess) => u.fullAccess || t.createdBy === u.id || t.assigneeId === u.id || (t.project !== null && isProjectManager(t.project, u.id)),
+    editTask: (u: Actor, t: TaskAccess) =>
+        u.fullAccess || t.createdBy === u.id || t.assigneeId === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
     manageCollaborators: (u: Actor, t: TaskAccess) => can.editTask(u, t),
     comment: (u: Actor, t: TaskAccess) => can.viewTask(u, t),
-    deleteTask: (u: Actor, t: TaskAccess) => u.fullAccess || t.createdBy === u.id || (t.project !== null && isProjectManager(t.project, u.id)),
+    deleteTask: (u: Actor, t: TaskAccess) => u.fullAccess || t.createdBy === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
 };
 
 /** Users @-mentioned can only be notified when they could open the task. */
 export async function usersWhoCanViewTask(userIds: number[], access: TaskAccess): Promise<number[]> {
     if (!userIds.length) return [];
-    const admins = await db()
-        .select({ id: schema.users.id })
+    const people = await db()
+        .select({ id: schema.users.id, department: schema.users.department, role: schema.roles.name })
         .from(schema.users)
         .innerJoin(schema.roles, eq(schema.roles.id, schema.users.roleId))
-        .where(and(inArray(schema.users.id, userIds), inArray(schema.roles.name, [...FULL_ACCESS_ROLES])));
-    const fullAccessIds = new Set(admins.map((a) => a.id));
-    return userIds.filter((id) => can.viewTask({ id, fullAccess: fullAccessIds.has(id) }, access));
+        .where(inArray(schema.users.id, userIds));
+    return people.filter((p) => can.viewTask({ id: p.id, fullAccess: FULL_ACCESS_ROLES.includes(p.role as RoleName), department: p.department }, access)).map((p) => p.id);
 }

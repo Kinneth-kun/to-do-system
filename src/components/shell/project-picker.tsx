@@ -10,7 +10,8 @@ import { openModal } from '../client/modal';
  * half-filled task form around it is never lost.
  */
 
-export type ProjectOption = { id: number; name: string };
+/** `completed`: tasks added to it become post-launch items (enhancement / bug fix / update). */
+export type ProjectOption = { id: number; name: string; completed?: boolean };
 export type CreatedProject = { id: number; name: string; color: string; url: string };
 
 /* The project the current page is about — pre-selects it in quick create. */
@@ -90,7 +91,7 @@ export function ProjectPicker({
                 <option value="">Choose a project</option>
                 {options.map((p) => (
                     <option key={p.id} value={p.id}>
-                        {p.name}
+                        {p.completed ? `${p.name} (completed)` : p.name}
                     </option>
                 ))}
             </select>

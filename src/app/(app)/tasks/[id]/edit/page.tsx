@@ -30,6 +30,7 @@ export default async function EditTaskPage({ params }: { params: Promise<{ id: s
                 defaults={{
                     title: task.title,
                     description: task.description,
+                    category: task.category,
                     priority: task.priority,
                     startDate: task.startDate,
                     dueDate: task.dueDate,

@@ -3,11 +3,15 @@
 import { and, eq } from 'drizzle-orm';
 import { forbidden, notFound, redirect } from 'next/navigation';
 import { can, isProjectMember, projectAccess, type ProjectAccess } from '@/lib/access';
+import { logActivity } from '@/lib/activity';
 import { requireUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
+import { now } from '@/lib/dates';
 import { Priority, PROJECT_COLORS, ProjectMemberRole, ProjectStatus } from '@/lib/enums';
 import { done, flash } from '@/lib/flash';
+import { Notify } from '@/lib/notifications';
 import { ProjectService } from '@/lib/services/projects';
+import { isFullAccessUser } from '@/lib/users';
 import { Validator, type FormState } from '@/lib/validation';
 
 async function accessOr404(projectId: number): Promise<ProjectAccess> {
@@ -84,6 +88,16 @@ export async function updateProjectAction(projectId: number, _: FormState, formD
     redirect(`/projects/${projectId}`);
 }
 
+/** "Mark as completed" / "Reopen" on the project page. */
+export async function setProjectCompletedAction(projectId: number, completed: boolean): Promise<void> {
+    const user = await requireUser();
+    const access = await accessOr404(projectId);
+    if (!can.updateProject(user, access)) forbidden();
+
+    await ProjectService.setStatus(projectId, completed ? 'completed' : 'active', user);
+    await done('success', completed ? 'Project marked as completed. Log enhancements and fixes below.' : 'Project reopened.');
+}
+
 export async function deleteProjectAction(projectId: number): Promise<void> {
     const user = await requireUser();
     const access = await accessOr404(projectId);
@@ -92,6 +106,44 @@ export async function deleteProjectAction(projectId: number): Promise<void> {
     await ProjectService.delete(projectId, user);
     await flash('success', 'Project deleted.');
     redirect('/projects');
+}
+
+/* ------------------------------------------------------------------ suggestions */
+
+/** Anyone who can see the project may leave a recommendation or suggestion on it. */
+export async function addSuggestionAction(projectId: number, _: FormState, formData: FormData): Promise<FormState> {
+    const user = await requireUser();
+    const access = await accessOr404(projectId);
+    if (!can.viewProject(user, access)) forbidden();
+
+    const v = new Validator(formData);
+    const body = v.string('body', { required: true, max: 1000, label: 'suggestion' });
+    if (v.fails()) return v.state();
+
+    const [suggestion] = await db()
+        .insert(schema.projectSuggestions)
+        .values({ projectId, userId: user.id, body: body!, createdAt: now(), updatedAt: now() })
+        .returning();
+    const [project] = await db().select({ id: schema.projects.id, name: schema.projects.name }).from(schema.projects).where(eq(schema.projects.id, projectId));
+    await logActivity('suggestion.added', `${user.name} suggested on "${project.name}": ${body}`, { type: 'project_suggestion', id: suggestion.id }, { project_id: projectId }, user.id);
+    const managers = [access.ownerId, ...[...access.roles].filter(([, role]) => role === 'manager').map(([id]) => id)];
+    await Notify.suggestionAdded(project, managers, suggestion.id, suggestion.body, user);
+
+    await done('success', 'Thanks — your suggestion was added.');
+    return { ok: true };
+}
+
+/** The author, the project's owner/managers, and administrators/executives can remove a suggestion. */
+export async function deleteSuggestionAction(suggestionId: number): Promise<void> {
+    const user = await requireUser();
+    const [suggestion] = await db().select().from(schema.projectSuggestions).where(eq(schema.projectSuggestions.id, suggestionId));
+    if (!suggestion) notFound();
+    const access = await accessOr404(suggestion.projectId);
+    if (!(can.viewProject(user, access) && (suggestion.userId === user.id || can.updateProject(user, access)))) forbidden();
+
+    await db().delete(schema.projectSuggestions).where(eq(schema.projectSuggestions.id, suggestionId));
+    await logActivity('suggestion.deleted', `${user.name} removed a suggestion`, { type: 'project', id: suggestion.projectId }, { suggestion_id: suggestionId }, user.id);
+    await done('success', 'Suggestion removed.');
 }
 
 /* ------------------------------------------------------------------ members */
@@ -112,6 +164,9 @@ export async function addMemberAction(projectId: number, _: FormState, formData:
         .where(and(eq(schema.users.id, userId!), eq(schema.users.isActive, true)))
         .limit(1);
     if (!member) return v.state({ user_id: 'The selected person is invalid.' });
+    if (await isFullAccessUser(member.id)) {
+        return v.state({ user_id: 'Administrators and executives can’t be project members — they already have access to every project.' });
+    }
 
     await ProjectService.addMember(projectId, member.id, user, role);
     await done('success', 'Project member added.');

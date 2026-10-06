@@ -6,7 +6,7 @@ import type { Actor } from '@/lib/access';
 
 let sequence = 0;
 
-export type TestUser = { id: number; name: string; username: string; email: string; isAdmin: boolean; fullAccess: boolean };
+export type TestUser = { id: number; name: string; username: string; email: string; isAdmin: boolean; fullAccess: boolean; department: string | null };
 
 export async function makeUser(attributes: Partial<Parameters<typeof createUser>[0]> & { admin?: boolean; executive?: boolean } = {}): Promise<TestUser> {
     sequence++;
@@ -19,10 +19,10 @@ export async function makeUser(attributes: Partial<Parameters<typeof createUser>
         roleId: await roleId(admin ? ROLE_ADMIN : executive ? ROLE_EXECUTIVE : ROLE_USER),
         ...rest,
     });
-    return { id: user.id, name: user.name, username: user.username, email: user.email, isAdmin: !!admin, fullAccess: !!admin || !!executive };
+    return { id: user.id, name: user.name, username: user.username, email: user.email, isAdmin: !!admin, fullAccess: !!admin || !!executive, department: user.department };
 }
 
-export const actor = (u: TestUser): Actor => ({ id: u.id, fullAccess: u.fullAccess });
+export const actor = (u: TestUser): Actor => ({ id: u.id, fullAccess: u.fullAccess, department: u.department });
 
 export async function task(id: number) {
     const [row] = await db().select().from(schema.tasks).where(eq(schema.tasks.id, id));

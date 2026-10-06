@@ -7,7 +7,7 @@ import { deleteAttachmentAction, deleteCommentAction, deleteTaskAction, removeCo
 import { requireUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
 import { diffForHumans, formatDate } from '@/lib/dates';
-import { Department, FULL_ACCESS_ROLES, Priority, TaskStatus, taskStatusColor } from '@/lib/enums';
+import { Department, FULL_ACCESS_ROLES, Priority, TaskCategory, TaskStatus, taskStatusColor } from '@/lib/enums';
 import { blobAccess, blobEnabled, humanSize } from '@/lib/storage';
 import { userLiteColumns, usersByIds, type UserLite } from '@/lib/users';
 import { describeDue, dueContext, loadHistory } from '@/lib/views';
@@ -17,7 +17,7 @@ import { SetCurrentProject } from '@/components/shell/project-picker';
 import { AddCollaboratorForm, AttachmentUploader, CommentForm } from '@/components/tasks/collaboration';
 import { History } from '@/components/tasks/history';
 import { QuickUpdate } from '@/components/tasks/quick-update';
-import { Avatar, DepartmentBadge, DueDate, PageHeader, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '@/components/ui';
+import { Avatar, CategoryBadge, DepartmentBadge, DueDate, PageHeader, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '@/components/ui';
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -94,6 +94,7 @@ export default async function TaskPage({ params }: Props) {
     const status = task.status as TaskStatus;
     const details: [string, string][] = [
         ['Project', project?.name ?? (task.projectId ? '—' : 'None (standalone)')],
+        ...(TaskCategory.is(task.category) ? [['Type', TaskCategory.label(task.category)] as [string, string]] : []),
         ['Priority', Priority.label(task.priority as Priority)],
         ['Start date', task.startDate ? formatDate(task.startDate, 'M j, Y') : '—'],
         ['Due date', task.dueDate ? formatDate(task.dueDate, 'M j, Y') : '—'],
@@ -121,6 +122,7 @@ export default async function TaskPage({ params }: Props) {
                         </nav>
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                             <StatusBadge status={status} size="lg" />
+                            <CategoryBadge category={task.category} />
                             <PriorityBadge priority={task.priority} />
                             <DueDate text={due.text} state={due.state} title={due.title} />
                             {task.latestUpdateAt && <span className="text-xs text-slate-400">Updated {diffForHumans(task.latestUpdateAt)}</span>}

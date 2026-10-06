@@ -20,6 +20,8 @@ export type ProjectChip = { id: number; name: string; color: string };
 export type TaskRowData = {
     id: number;
     title: string;
+    /** Post-launch type (enhancement / bug fix / update), or null for a regular task. */
+    category: string | null;
     status: TaskStatus;
     priority: Priority;
     progress: number;
@@ -70,6 +72,7 @@ export async function buildTaskRows(user: Actor, rows: TaskRow[], options: { due
     return rows.map((t) => ({
         id: t.id,
         title: t.title,
+        category: t.category,
         status: t.status as TaskStatus,
         priority: t.priority as Priority,
         progress: t.progress,
