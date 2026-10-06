@@ -7,6 +7,7 @@ import { db, schema } from '@/lib/db';
 import { isValidDate, today } from '@/lib/dates';
 import { TaskCategory } from '@/lib/enums';
 import { param } from '@/lib/views';
+import { assigneeOptions } from '@/lib/users';
 import { TaskForm } from '@/components/tasks/task-form';
 import { PageHeader } from '@/components/ui';
 
@@ -47,6 +48,8 @@ export default async function NewTaskPage({ searchParams }: { searchParams: Prom
                 submitLabel="Create task"
                 create={{ projects, projectId, kind }}
                 today={today()}
+                assignees={await assigneeOptions(user.id)}
+                currentUserId={user.id}
             />
         </>
     );

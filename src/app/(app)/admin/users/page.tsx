@@ -142,9 +142,6 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                         <button type="submit" className="btn-secondary">
                             <Icon name="search" className="h-4 w-4" /> Filter
                         </button>
-                        <Link href="/admin/users" className="btn-ghost">
-                            Clear
-                        </Link>
                     </div>
                 </div>
             </form>

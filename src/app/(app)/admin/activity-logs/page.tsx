@@ -98,11 +98,6 @@ export default async function ActivityLogsPage({ searchParams }: { searchParams:
                         Apply
                     </button>
                 </noscript>
-                {(type || userId) && (
-                    <Link href="/admin/activity-logs" className="btn-ghost btn-sm">
-                        Clear filters
-                    </Link>
-                )}
             </form>
 
             {days.length ? (

@@ -6,6 +6,7 @@ import { acquireLock, rateLimit } from '@/lib/locks';
 import { ProjectService } from '@/lib/services/projects';
 import { TaskService } from '@/lib/services/tasks';
 import { safeRelativePath } from '@/lib/urls';
+import { assigneeOptions, canBeAssigned } from '@/lib/users';
 import { actor, makeUser } from './helpers';
 
 async function visibleTaskTitles(user: Awaited<ReturnType<typeof makeUser>>) {
@@ -131,6 +132,27 @@ describe('visibility', () => {
         expect(await taskAccess(t.id)).toBeNull();
         const [row] = await db().select().from(schema.tasks).where(eq(schema.tasks.id, t.id));
         expect(row.deletedAt).not.toBeNull();
+    });
+});
+
+describe('assigning tasks', () => {
+    it('offers regular users, yourself and the current assignee — never other admins or executives', async () => {
+        const me = await makeUser();
+        const colleague = await makeUser();
+        const admin = await makeUser({ admin: true });
+        const executive = await makeUser({ executive: true });
+
+        expect(await canBeAssigned(colleague.id, me.id)).toBe(true);
+        expect(await canBeAssigned(admin.id, me.id)).toBe(false);
+        expect(await canBeAssigned(executive.id, me.id)).toBe(false);
+        // An administrator can still assign a task to themselves, and an existing assignee stays valid.
+        expect(await canBeAssigned(admin.id, admin.id)).toBe(true);
+        expect(await canBeAssigned(executive.id, me.id, executive.id)).toBe(true);
+
+        const options = (await assigneeOptions(admin.id)).map((u) => u.id);
+        expect(options).toContain(admin.id);
+        expect(options).toContain(colleague.id);
+        expect(options).not.toContain(executive.id);
     });
 });
 

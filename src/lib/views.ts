@@ -1,5 +1,5 @@
 import 'server-only';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db, schema } from './db';
 import { can, loadTaskAccess, type Actor } from './access';
 import { formatDate, today } from './dates';
@@ -33,6 +33,8 @@ export type TaskRowData = {
     assignee: UserLite | null;
     due: { text: string | null; state: DueState; title: string | null };
     canUpdate: boolean;
+    /** Pinned by the viewer as a priority (Focus of the Day). */
+    focused: boolean;
 };
 
 export type DueContext = { today: string; dueSoonDays: number };
@@ -62,6 +64,14 @@ export async function projectChips(ids: (number | null)[]): Promise<Map<number, 
 export async function buildTaskRows(user: Actor, rows: TaskRow[], options: { dueFormat?: string } = {}): Promise<TaskRowData[]> {
     if (!rows.length) return [];
 
+    const focusedIds = new Set(
+        (
+            await db()
+                .select({ taskId: schema.taskFocus.taskId })
+                .from(schema.taskFocus)
+                .where(and(eq(schema.taskFocus.userId, user.id), inArray(schema.taskFocus.taskId, rows.map((t) => t.id))))
+        ).map((f) => f.taskId),
+    );
     const [ctx, projects, assignees, access] = [
         await dueContext(),
         await projectChips(rows.map((t) => t.projectId)),
@@ -82,6 +92,7 @@ export async function buildTaskRows(user: Actor, rows: TaskRow[], options: { due
         assignee: t.assigneeId ? (assignees.get(t.assigneeId) ?? null) : null,
         due: describeDue(t, ctx, options.dueFormat),
         canUpdate: access.has(t.id) ? can.updateTask(user, access.get(t.id)!) : false,
+        focused: focusedIds.has(t.id),
     }));
 }
 

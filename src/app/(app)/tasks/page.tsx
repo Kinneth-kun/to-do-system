@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { and, asc, count, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { projectAlive, projectVisibleTo, taskAlive, taskInvolving, taskVisibleTo } from '@/lib/access';
 import { requireUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
@@ -12,7 +12,7 @@ import { buildTaskRows, lastPage, paging, param } from '@/lib/views';
 import { Icon } from '@/components/icon';
 import { AutoSubmitSelect } from '@/components/client/auto-submit';
 import { TaskRow } from '@/components/tasks/task-row';
-import { cx, EmptyState, PageHeader, Pagination } from '@/components/ui';
+import { cx, EmptyState, PageHeader, Pagination, StandaloneBadge } from '@/components/ui';
 
 export async function generateMetadata(): Promise<Metadata> {
     return { title: (await requireUser()).fullAccess ? 'All Tasks' : 'My Tasks' };
@@ -20,6 +20,13 @@ export async function generateMetadata(): Promise<Metadata> {
 
 const PER_PAGE = 10;
 const { tasks } = schema;
+
+type TaskType = 'project' | 'standalone';
+const TYPE_OPTIONS: { value: TaskType | ''; label: string }[] = [
+    { value: '', label: 'All tasks' },
+    { value: 'project', label: 'Project tasks' },
+    { value: 'standalone', label: 'Standalone tasks' },
+];
 
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
     const user = await requireUser();
@@ -29,9 +36,10 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     const status = TaskStatus.is(param(params.status)) ? (param(params.status) as TaskStatus) : '';
     const department = user.fullAccess && Department.is(param(params.department)) ? param(params.department)! : '';
     const mine = ['1', 'true', 'on'].includes(param(params.mine) ?? '');
-    // ?project_id=<id>, or ?project_id=standalone for tasks that aren't in any project.
-    const standaloneOnly = param(params.project_id) === 'standalone';
-    const projectId = /^\d+$/.test(param(params.project_id) ?? '') ? Number(param(params.project_id)) : null;
+    // ?project_id=<id>; ?type=project|standalone (?project_id=standalone still means standalone).
+    const requestedType = param(params.project_id) === 'standalone' ? 'standalone' : param(params.type);
+    const projectId = requestedType !== 'standalone' && /^\d+$/.test(param(params.project_id) ?? '') ? Number(param(params.project_id)) : null;
+    const type: TaskType | '' = requestedType === 'standalone' ? 'standalone' : projectId || requestedType === 'project' ? 'project' : '';
 
     const projects = await db()
         .select({ id: schema.projects.id, name: schema.projects.name })
@@ -40,28 +48,48 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         .orderBy(asc(schema.projects.name));
     if (projectId && !projects.some((p) => p.id === projectId)) notFound();
 
-    const where = and(
+    // Every filter except the type, so the tabs can show how many of each there are.
+    const filtered = and(
         taskAlive,
         taskVisibleTo(user),
         q ? contains(tasks.title, q) : undefined,
         status ? eq(tasks.status, status) : undefined,
-        projectId ? eq(tasks.projectId, projectId) : standaloneOnly ? isNull(tasks.projectId) : undefined,
+        projectId ? eq(tasks.projectId, projectId) : undefined,
         mine ? taskInvolving(user.id) : undefined,
         department ? sql`exists (select 1 from users u where u.id = ${tasks.assigneeId} and u.department = ${department})` : undefined,
     );
+    const where = and(filtered, type === 'project' ? isNotNull(tasks.projectId) : type === 'standalone' ? isNull(tasks.projectId) : undefined);
 
+    // Group sizes: one per project, plus standalone (key null).
+    const groupRows = await db().select({ projectId: tasks.projectId, c: count() }).from(tasks).where(filtered).groupBy(tasks.projectId);
+    const groupSize = new Map(groupRows.map((g) => [g.projectId, Number(g.c)]));
+    const typeCounts = {
+        '': groupRows.reduce((sum, g) => sum + Number(g.c), 0),
+        project: groupRows.filter((g) => g.projectId !== null).reduce((sum, g) => sum + Number(g.c), 0),
+        standalone: groupSize.get(null) ?? 0,
+    };
+
+    // Categorised: project tasks grouped by project (A–Z), then standalone tasks; due date within each.
     const { page, offset } = paging(params, PER_PAGE);
-    const [{ total }] = await db().select({ total: count() }).from(tasks).where(where);
+    const total = type ? typeCounts[type] : typeCounts[''];
     const rows = await db()
         .select()
         .from(tasks)
         .where(where)
-        .orderBy(sql`${tasks.dueDate} desc nulls last`, desc(tasks.createdAt))
+        .orderBy(
+            sql`${tasks.projectId} is null`,
+            sql`(select lower(p.name) from projects p where p.id = ${tasks.projectId})`,
+            tasks.projectId,
+            sql`${tasks.dueDate} desc nulls last`,
+            desc(tasks.createdAt),
+        )
         .limit(PER_PAGE)
         .offset(offset);
     const taskRows = await buildTaskRows(user, rows);
+    // A header wherever the group changes (and at the top of every page).
+    const groupKey = (t: (typeof taskRows)[number]) => (t.standalone ? 'standalone' : `p${t.project?.id ?? 0}`);
 
-    const active = { q: q || null, status: status || null, project_id: standaloneOnly ? 'standalone' : projectId, mine: mine || null, department: department || null };
+    const active = { q: q || null, status: status || null, type: projectId ? null : type || null, project_id: projectId, mine: mine || null, department: department || null };
     const hasFilters = Object.values(active).some(Boolean);
 
     return (
@@ -111,9 +139,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                         ))}
                     </AutoSubmitSelect>
                 )}
-                <AutoSubmitSelect className="form-select sm:w-52" name="project_id" defaultValue={standaloneOnly ? 'standalone' : (projectId ?? '')} aria-label="Filter by project">
+                <AutoSubmitSelect className="form-select sm:w-52" name="project_id" defaultValue={projectId ?? ''} aria-label="Filter by project">
                     <option value="">All projects</option>
-                    <option value="standalone">Standalone tasks</option>
                     {projects.map((p) => (
                         <option key={p.id} value={p.id}>
                             {p.name}
@@ -124,11 +151,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                     <AutoSubmitSelect as="checkbox" name="mine" value="1" defaultChecked={mine} className="form-checkbox" />
                     Only mine
                 </label>
-                {hasFilters && (
-                    <Link href="/tasks" className="btn-ghost btn-sm">
-                        Clear
-                    </Link>
-                )}
+                {/* Project tasks vs standalone tasks, with how many of each match the other filters. */}
+                <AutoSubmitSelect className="form-select sm:w-52" name="type" defaultValue={type} aria-label="Project or standalone tasks">
+                    {TYPE_OPTIONS.map((o) => (
+                        <option key={o.value || 'all'} value={o.value}>
+                            {o.label} ({typeCounts[o.value]})
+                        </option>
+                    ))}
+                </AutoSubmitSelect>
                 <Link href="/tasks/new" className="btn-primary sm:ml-auto">
                     <Icon name="plus" className="h-4 w-4" stroke={2} /> New task
                 </Link>
@@ -137,7 +167,33 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             <div className="card">
                 <div className="divide-y divide-slate-100">
                     {taskRows.length ? (
-                        taskRows.map((task) => <TaskRow key={task.id} task={task} />)
+                        taskRows.map((task, i) => {
+                            const startsGroup = i === 0 || groupKey(taskRows[i - 1]) !== groupKey(task);
+                            const size = groupSize.get(task.standalone ? null : (task.project?.id ?? null)) ?? 0;
+                            return (
+                                <div key={task.id}>
+                                    {startsGroup && (
+                                        <div className="flex items-center gap-2 bg-slate-50/80 px-4 py-2 text-xs font-semibold text-slate-600">
+                                            {task.standalone ? (
+                                                <StandaloneBadge />
+                                            ) : (
+                                                <Link href={`/projects/${task.project?.id}`} className="inline-flex min-w-0 items-center gap-2 hover:text-indigo-600">
+                                                    <span className={`h-2.5 w-2.5 shrink-0 rounded-sm bg-${task.project?.color ?? 'slate'}-500`} />
+                                                    <span className="truncate">{task.project?.name ?? 'Project'}</span>
+                                                </Link>
+                                            )}
+                                            <span className="font-normal text-slate-400">
+                                                {size} {size === 1 ? 'task' : 'tasks'}
+                                            </span>
+                                        </div>
+                                    )}
+                                    <div className={startsGroup ? 'border-t border-slate-100' : ''}>
+                                        {/* The group header already names the project. */}
+                                        <TaskRow task={task} showProject={false} />
+                                    </div>
+                                </div>
+                            );
+                        })
                     ) : (
                         <EmptyState icon="tasks" title="No matching tasks" description={hasFilters ? 'Try clearing a filter or searching for something else.' : 'Create your first task to get started.'}>
                             <Link href="/tasks/new" className="btn-primary btn-sm">
@@ -146,9 +202,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                         </EmptyState>
                     )}
                 </div>
-                {Number(total) > PER_PAGE && (
+                {total > PER_PAGE && (
                     <div className="border-t border-slate-100 px-5 py-3">
-                        <Pagination page={page} lastPage={lastPage(Number(total), PER_PAGE)} total={Number(total)} perPage={PER_PAGE} href={(p) => withQuery('/tasks', { ...active, page: p })} />
+                        <Pagination page={page} lastPage={lastPage(total, PER_PAGE)} total={total} perPage={PER_PAGE} href={(p) => withQuery('/tasks', { ...active, page: p })} />
                     </div>
                 )}
             </div>

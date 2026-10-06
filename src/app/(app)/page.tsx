@@ -118,6 +118,21 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     const overdueFocus = focusRows.filter((t) => t.due.state === 'overdue');
     const todayFocus = focusRows.filter((t) => t.due.state !== 'overdue');
 
+    // Plus the open tasks you pinned as priorities (the ☆ on any task), newest pin first.
+    const pinned = await db()
+        .select({ task: tasks })
+        .from(schema.taskFocus)
+        .innerJoin(tasks, eq(tasks.id, schema.taskFocus.taskId))
+        .where(and(eq(schema.taskFocus.userId, user.id), visible, inArray(tasks.status, ['pending', 'in_progress', 'delayed', 'on_hold'])))
+        .orderBy(desc(schema.taskFocus.createdAt))
+        .limit(20);
+    const alreadyListed = new Set(focusRows.map((t) => t.id));
+    const priorityFocus = await buildTaskRows(
+        user,
+        pinned.map((p) => p.task).filter((t) => !alreadyListed.has(t.id)),
+    );
+    const focusCount = focusRows.length + priorityFocus.length;
+
     // Latest updates across the projects and standalone tasks you can see.
     const feed = await db()
         .select({
@@ -209,7 +224,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 </div>
             </section>
 
-            {/* Focus of the Day: what has to be finished today */}
+            {/* Focus of the Day: your pinned priorities, then overdue and due-today work */}
             <section className="card mb-6 overflow-hidden">
                 <div className="card-header flex-wrap gap-3 bg-gradient-to-r from-indigo-50/80 to-white">
                     <div className="flex items-center gap-3">
@@ -220,8 +235,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                             <h2 className="card-title">Focus of the Day</h2>
                             <p className="mt-0.5 text-xs text-slate-500">
                                 {formatDate(day, 'l, F j')} ·{' '}
-                                {focusRows.length
-                                    ? `${focusRows.length} ${plural(focusRows.length, 'task')} to finish today${overdueFocus.length ? `, ${overdueFocus.length} overdue` : ''}`
+                                {focusCount
+                                    ? [
+                                          `${focusCount} ${plural(focusCount, 'task')} in focus`,
+                                          priorityFocus.length ? `${priorityFocus.length} ${priorityFocus.length === 1 ? 'priority' : 'priorities'}` : null,
+                                          overdueFocus.length ? `${overdueFocus.length} overdue` : null,
+                                      ]
+                                          .filter(Boolean)
+                                          .join(', ')
                                     : 'nothing due today'}
                             </p>
                         </div>
@@ -230,8 +251,18 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         Today&apos;s calendar
                     </Link>
                 </div>
-                {focusRows.length ? (
+                {focusCount ? (
                     <div className="divide-y divide-slate-100">
+                        {priorityFocus.length > 0 && (
+                            <>
+                                <p className="flex items-center gap-1.5 bg-indigo-50/60 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-indigo-700 uppercase">
+                                    <Icon name="star" className="h-3.5 w-3.5 fill-indigo-400" /> Your priorities
+                                </p>
+                                {priorityFocus.map((task) => (
+                                    <TaskRow key={task.id} task={task} />
+                                ))}
+                            </>
+                        )}
                         {overdueFocus.length > 0 && (
                             <>
                                 <p className="bg-red-50/60 px-4 py-1.5 text-[11px] font-semibold tracking-wide text-red-700 uppercase">Overdue — catch up first</p>
@@ -250,7 +281,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         )}
                     </div>
                 ) : (
-                    <EmptyState icon="check-circle" title="Nothing due today" description="No overdue or due-today work. A good day to get ahead on what's next." />
+                    <EmptyState
+                        icon="check-circle"
+                        title="Nothing due today"
+                        description="No overdue or due-today work. Tap the ☆ on any task to make it one of today's priorities."
+                    />
                 )}
             </section>
 

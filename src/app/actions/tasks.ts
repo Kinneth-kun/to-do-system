@@ -12,7 +12,7 @@ import { ValidationError } from '@/lib/errors';
 import { done, flash } from '@/lib/flash';
 import { loadTaskInfo, Notify } from '@/lib/notifications';
 import { TaskService } from '@/lib/services/tasks';
-import { isFullAccessUser } from '@/lib/users';
+import { canBeAssigned, isFullAccessUser } from '@/lib/users';
 import { ALLOWED_EXTENSIONS, blobEnabled, blobHead, deleteStoredFile, detectType, MAX_ATTACHMENT_BYTES, saveLocal } from '@/lib/storage';
 import { Validator, type FormState } from '@/lib/validation';
 
@@ -55,6 +55,8 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     // Only used when the project is completed (post-launch item); ignored otherwise.
     const category = v.oneOf('category', TaskCategory.values);
     const priority = v.oneOf('priority', Priority.values, { required: true });
+    // Defaults to the creator when left empty.
+    const assigneeId = v.int('assignee_id') ?? user.id;
     const startDate = v.date('start_date');
     const dueDate = v.date('due_date', { afterOrEqual: 'start_date' });
     const status = v.oneOf('status', TaskStatus.values);
@@ -62,6 +64,7 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     const collaboratorIds = v.ints('collaborator_ids[]');
 
     if (!standalone && !projectId) v.fail('project_id', 'Please choose a project, or make this a standalone task.');
+    if (!(await canBeAssigned(assigneeId, user.id))) v.fail('assignee_id', 'Choose someone from the list.');
     if (v.fails()) return v.state();
 
     if (!standalone) {
@@ -73,8 +76,7 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     let taskId: number;
     try {
         const task = await TaskService.create(
-            // The creator owns the task: it is assigned to them automatically.
-            { projectId, title: title!, description, category, priority, assigneeId: user.id, startDate, dueDate, status, progress, collaboratorIds },
+            { projectId, title: title!, description, category, priority, assigneeId, startDate, dueDate, status, progress, collaboratorIds },
             user,
         );
         taskId = task.id;
@@ -96,16 +98,17 @@ export async function updateTaskAction(taskId: number, _: FormState, formData: F
     const description = v.string('description', { max: 10000, keepWhitespace: true });
     const category = v.oneOf('category', TaskCategory.values);
     const priority = v.oneOf('priority', Priority.values, { required: true });
+    const assigneeId = v.int('assignee_id', { required: true, label: 'assignee' });
     const startDate = v.date('start_date');
     const dueDate = v.date('due_date', { afterOrEqual: 'start_date' });
+    if (assigneeId && !(await canBeAssigned(assigneeId, user.id, access.assigneeId))) v.fail('assignee_id', 'Choose someone from the list.');
     if (v.fails()) return v.state();
 
     // A post-launch item can switch type (enhancement ⇄ bug fix ⇄ update); a build task stays one.
     const [current] = await db().select({ category: schema.tasks.category }).from(schema.tasks).where(eq(schema.tasks.id, taskId));
     const nextCategory = current?.category && category ? { category } : {};
 
-    // The assignee is not editable: it stays the person who created the task.
-    await TaskService.updateDetails(taskId, { title: title!, description, ...nextCategory, priority: priority!, startDate, dueDate }, user);
+    await TaskService.updateDetails(taskId, { title: title!, description, ...nextCategory, priority: priority!, assigneeId, startDate, dueDate }, user);
 
     await flash('success', 'Task details updated.');
     redirect(`/tasks/${taskId}`);
@@ -161,6 +164,24 @@ export async function quickCreateAction(_: FormState, formData: FormData): Promi
     const task = await TaskService.create({ projectId, title: title!, dueDate, priority, assigneeId: user.id }, user);
     await flash('success', 'Task created.');
     redirect(`/tasks/${task.id}`);
+}
+
+/* ------------------------------------------------------------------ focus */
+
+/** Pin or unpin a task as one of *your* priorities (Focus of the Day). Personal to each user. */
+export async function toggleFocusAction(taskId: number): Promise<void> {
+    const user = await requireUser();
+    const access = await accessOr404(taskId);
+    if (!can.viewTask(user, access)) forbidden();
+
+    const removed = await db()
+        .delete(schema.taskFocus)
+        .where(and(eq(schema.taskFocus.userId, user.id), eq(schema.taskFocus.taskId, taskId)))
+        .returning({ id: schema.taskFocus.id });
+    if (!removed.length) {
+        await db().insert(schema.taskFocus).values({ userId: user.id, taskId, createdAt: now() }).onConflictDoNothing();
+    }
+    await done('success', removed.length ? 'Removed from your Focus of the Day.' : 'Added to your Focus of the Day.');
 }
 
 /* ------------------------------------------------------------------ collaborators */

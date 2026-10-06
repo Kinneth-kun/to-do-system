@@ -2,12 +2,21 @@
 
 import Link from 'next/link';
 import { useCallback, useState } from 'react';
-import { Priority, TaskCategory } from '@/lib/enums';
+import { Department, Priority, TaskCategory } from '@/lib/enums';
 import type { FormState } from '@/lib/validation';
 import { ActionForm, Input, Select, SubmitButton, Textarea, useFieldError, useOld } from '../client/form';
 import { Icon } from '../icon';
 import { ProjectPicker, type ProjectOption } from '../shell/project-picker';
 import { DueDatePresets, TaskKindToggle, type TaskKind } from './task-kind';
+
+export type AssigneeOption = { id: number; name: string; jobTitle?: string | null; department?: string | null };
+
+/** "Jane Cruz — IT Developer Associate" (or the department), with "(you)" on your own name. */
+function assigneeLabel(u: AssigneeOption, currentUserId: number): string {
+    const position = u.jobTitle?.trim() || (Department.is(u.department) ? Department.label(u.department) : '');
+    const name = u.id === currentUserId ? `${u.name} (you)` : u.name;
+    return position ? `${name} — ${position}` : name;
+}
 
 type TaskDefaults = {
     title?: string;
@@ -15,6 +24,7 @@ type TaskDefaults = {
     /** Post-launch type, when editing one. */
     category?: string | null;
     priority?: string;
+    assigneeId?: number | null;
     startDate?: string | null;
     dueDate?: string | null;
 };
@@ -47,6 +57,8 @@ export function TaskForm({
     create,
     standalone = false,
     today,
+    assignees,
+    currentUserId,
 }: {
     action: (state: FormState, formData: FormData) => Promise<FormState>;
     defaults?: TaskDefaults;
@@ -57,6 +69,9 @@ export function TaskForm({
     standalone?: boolean;
     /** Today in the app's timezone; enables the due-date shortcuts on standalone tasks. */
     today?: string;
+    /** Who the task can be assigned to; defaults to the current user. */
+    assignees: AssigneeOption[];
+    currentUserId: number;
 }) {
     const oldKind = useOld('kind', create?.kind ?? 'project');
     const [kind, setKind] = useState<TaskKind>(oldKind === 'standalone' ? 'standalone' : 'project');
@@ -97,14 +112,19 @@ export function TaskForm({
                 <div className="grid gap-5 sm:grid-cols-2">
                     <Input name="title" label="Title" defaultValue={defaults.title} required maxLength={255} wrapperClassName="sm:col-span-2" />
                     <Textarea name="description" label="Description" defaultValue={defaults.description ?? ''} rows={5} wrapperClassName="sm:col-span-2" />
-                    {/* No assignee field: a task belongs to the person who creates it. */}
-                    <div className="grid gap-5 sm:col-span-2 sm:grid-cols-3">
-                        <Select name="priority" label="Priority" options={Priority.options()} defaultValue={defaults.priority ?? 'medium'} required />
-                        <Input name="start_date" label="Start date" type="date" defaultValue={defaults.startDate ?? ''} />
-                        <div>
-                            <Input name="due_date" label="Due date" type="date" defaultValue={defaults.dueDate ?? ''} help="Overdue tasks are marked Delayed automatically." />
-                            {isStandalone && today && <DueDatePresets inputId="due_date" today={today} />}
-                        </div>
+                    <Select
+                        name="assignee_id"
+                        label="Assigned to"
+                        options={assignees.map((u) => ({ value: u.id, label: assigneeLabel(u, currentUserId) }))}
+                        defaultValue={defaults.assigneeId ?? currentUserId}
+                        required
+                        help="Defaults to you. Anyone else is notified and can update the task."
+                    />
+                    <Select name="priority" label="Priority" options={Priority.options()} defaultValue={defaults.priority ?? 'medium'} required />
+                    <Input name="start_date" label="Start date" type="date" defaultValue={defaults.startDate ?? ''} />
+                    <div>
+                        <Input name="due_date" label="Due date" type="date" defaultValue={defaults.dueDate ?? ''} help="Overdue tasks are marked Delayed automatically." />
+                        {isStandalone && today && <DueDatePresets inputId="due_date" today={today} />}
                     </div>
                 </div>
                 <div className="mt-6 flex flex-wrap justify-end gap-2">

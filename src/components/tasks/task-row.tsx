@@ -6,6 +6,7 @@ import { TaskStatus, taskStatusColor } from '@/lib/enums';
 import type { TaskRowData } from '@/lib/views';
 import { Icon } from '../icon';
 import { Avatar, CategoryBadge, DepartmentBadge, DueDate, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '../ui';
+import { FocusButton } from './focus-button';
 import { QuickUpdate } from './quick-update';
 
 /** One task in a list, with an inline quick update. Wrap lists in `card divide-y divide-slate-100`. */
@@ -75,6 +76,7 @@ export function TaskRow({
                         {task.assignee?.department && <DepartmentBadge department={task.assignee.department} size="sm" short className="hidden @3xl/row:inline-flex" />}
                     </span>
                 )}
+                <FocusButton taskId={task.id} focused={task.focused} />
                 {canUpdate && (
                     <button type="button" className="btn-ghost btn-sm shrink-0" onClick={() => setOpen((o) => !o)} aria-expanded={open} title="Quick update">
                         <Icon name="pencil" className="h-4 w-4" />

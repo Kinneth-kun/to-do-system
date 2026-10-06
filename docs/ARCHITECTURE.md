@@ -24,9 +24,12 @@ All mutations go through the services in `src/lib/services/`, which enforce thes
 - **Project suggestions** (`project_suggestions`): anyone who can see a project can leave a
   recommendation on its card (Projects list), shown one at a time, newest first. The author, the
   project's owner/managers and admins/executives can remove one; owner and managers are notified.
-- **Single primary assignee** (`tasks.assignee_id`) — always the person who created the task; the
-  task forms have no assignee field. Collaborators are separate (`task_collaborators`); the
-  assignee is never also a collaborator.
+- **Focus of the Day** (dashboard): your pinned priorities (`task_focus`, the ☆ on any task —
+  personal, kept until unpinned; closed tasks drop out), then your overdue and due-today work.
+- **Single primary assignee** (`tasks.assignee_id`), chosen with "Assigned to" on the task forms
+  and defaulting to the creator (quick create always assigns the creator). Anyone can be assigned
+  except other administrators/executives. The task's department follows its assignee.
+  Collaborators are separate (`task_collaborators`); the assignee is never also a collaborator.
 - **Statuses:** Pending, In Progress, Completed, Delayed, On Hold, Cancelled. **Progress:** 0%
   Pending, 1–99% In Progress, 100% Completed. The quick-update form mirrors this client-side.
 - **History is append-only:** every status, progress, remark, assignment and detail change writes

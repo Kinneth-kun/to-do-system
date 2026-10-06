@@ -6,6 +6,7 @@ import { updateTaskAction } from '@/app/actions/tasks';
 import { requireUser } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
 import { today } from '@/lib/dates';
+import { assigneeOptions } from '@/lib/users';
 import { TaskForm } from '@/components/tasks/task-form';
 import { PageHeader } from '@/components/ui';
 
@@ -31,6 +32,7 @@ export default async function EditTaskPage({ params }: { params: Promise<{ id: s
                     title: task.title,
                     description: task.description,
                     category: task.category,
+                    assigneeId: task.assigneeId,
                     priority: task.priority,
                     startDate: task.startDate,
                     dueDate: task.dueDate,
@@ -39,6 +41,8 @@ export default async function EditTaskPage({ params }: { params: Promise<{ id: s
                 submitLabel="Save changes"
                 standalone={task.projectId === null}
                 today={today()}
+                assignees={await assigneeOptions(user.id, task.assigneeId)}
+                currentUserId={user.id}
             />
         </>
     );

@@ -105,6 +105,22 @@ export async function isFullAccessUser(userId: number): Promise<boolean> {
     return !!rows[0] && FULL_ACCESS_ROLES.includes(rows[0].name as RoleName);
 }
 
+/**
+ * People a task can be assigned to: active regular users, plus yourself and (when editing) the
+ * current assignee. Administrators and executives are only ever assigned their own tasks.
+ */
+export async function assigneeOptions(actorId: number, currentAssigneeId: number | null = null): Promise<UserLite[]> {
+    const people = await assignableUsers();
+    const missing = [actorId, currentAssigneeId].filter((id): id is number => id !== null && !people.some((p) => p.id === id));
+    if (missing.length) people.push(...(await usersByIds(missing)).values());
+    return people.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function canBeAssigned(userId: number, actorId: number, currentAssigneeId: number | null = null): Promise<boolean> {
+    if (userId === actorId || userId === currentAssigneeId) return true;
+    return (await assignableUsers()).some((p) => p.id === userId);
+}
+
 export async function isAdminUser(userId: number): Promise<boolean> {
     const rows = await db()
         .select({ name: schema.roles.name })

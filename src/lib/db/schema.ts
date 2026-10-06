@@ -175,6 +175,18 @@ export const taskCollaborators = pgTable(
     (t) => [uniqueIndex('task_collaborators_task_user_unique').on(t.taskId, t.userId), index('task_collaborators_user_index').on(t.userId)],
 );
 
+/** Tasks a person pinned as a priority — shown in their own Focus of the Day. */
+export const taskFocus = pgTable(
+    'task_focus',
+    {
+        id: serial('id').primaryKey(),
+        userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+        taskId: integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+        createdAt: ts('created_at').notNull().defaultNow(),
+    },
+    (t) => [uniqueIndex('task_focus_user_task_unique').on(t.userId, t.taskId)],
+);
+
 /** Append-only history. Rows are never updated or deleted by the application (enforced by a trigger). */
 export const taskUpdates = pgTable(
     'task_updates',

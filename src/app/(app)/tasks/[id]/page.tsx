@@ -16,6 +16,7 @@ import { ConfirmForm } from '@/components/client/confirm';
 import { SetCurrentProject } from '@/components/shell/project-picker';
 import { AddCollaboratorForm, AttachmentUploader, CommentForm } from '@/components/tasks/collaboration';
 import { History } from '@/components/tasks/history';
+import { FocusButton } from '@/components/tasks/focus-button';
 import { QuickUpdate } from '@/components/tasks/quick-update';
 import { Avatar, CategoryBadge, DepartmentBadge, DueDate, PageHeader, PriorityBadge, ProgressBar, StandaloneBadge, StatusBadge } from '@/components/ui';
 
@@ -91,6 +92,13 @@ export default async function TaskPage({ params }: Props) {
         : [];
 
     const due = describeDue(task, await dueContext(), 'M j, Y');
+    const focused = (
+        await db()
+            .select({ id: schema.taskFocus.id })
+            .from(schema.taskFocus)
+            .where(and(eq(schema.taskFocus.userId, user.id), eq(schema.taskFocus.taskId, task.id)))
+            .limit(1)
+    ).length > 0;
     const status = task.status as TaskStatus;
     const details: [string, string][] = [
         ['Project', project?.name ?? (task.projectId ? '—' : 'None (standalone)')],
@@ -131,6 +139,7 @@ export default async function TaskPage({ params }: Props) {
                 }
                 actions={
                     <>
+                        <FocusButton taskId={task.id} focused={focused} labelled />
                         {canEdit && (
                             <Link className="btn-secondary" href={`/tasks/${task.id}/edit`}>
                                 <Icon name="pencil" className="h-4 w-4" /> Edit
