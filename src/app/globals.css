@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+
+@source '../';
+
+/* Colour families are chosen at runtime from enums (taskStatusColor() etc.), so safelist them. */
+@source inline("{bg,text,border,ring,fill,stroke,from,to,via,accent,outline,divide}-{slate,zinc,gray,red,orange,amber,yellow,lime,green,emerald,teal,cyan,sky,blue,indigo,violet,purple,fuchsia,pink,rose}-{50,100,200,300,400,500,600,700,800}");
+@source inline("{hover:,group-hover:,}{bg,text,border}-{slate,zinc,red,orange,amber,emerald,teal,cyan,sky,blue,indigo,violet,fuchsia,rose}-{50,100,200,600,700}");
+@source inline("{bg,text}-{slate,zinc,red,orange,amber,emerald,teal,cyan,sky,blue,indigo,violet,fuchsia,rose}-{300,400,500}/{15,20}");
+@source inline("hover:bg-{slate,zinc,red,orange,amber,emerald,teal,cyan,sky,blue,indigo,violet,fuchsia,rose}-50/40");
+@source inline("ring-{slate,zinc,red,orange,amber,emerald,teal,cyan,sky,blue,indigo,violet,fuchsia,rose}-{100,200}");
+
+@theme {
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+}
+
+@layer base {
+    html {
+        -webkit-tap-highlight-color: transparent;
+    }
+    body {
+        @apply bg-slate-50 text-slate-800 antialiased;
+    }
+    button:not(:disabled),
+    [role='button']:not(:disabled) {
+        cursor: pointer;
+    }
+}
+
+/* ---------- Buttons ---------- */
+@utility btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium whitespace-nowrap transition focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+}
+@utility btn-primary {
+    @apply btn bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 active:bg-indigo-800;
+}
+@utility btn-secondary {
+    @apply btn border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-slate-300 hover:bg-slate-50;
+}
+@utility btn-danger {
+    @apply btn bg-red-600 text-white shadow-sm hover:bg-red-700;
+}
+@utility btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900;
+}
+@utility btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+}
+@utility btn-icon {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500;
+}
+
+/* ---------- Forms ---------- */
+@utility form-label {
+    @apply mb-1 block text-sm font-medium text-slate-700;
+}
+@utility form-input {
+    @apply block w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 hover:border-slate-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500;
+}
+@utility form-select {
+    @apply form-input appearance-none bg-no-repeat pr-9;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2364748b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-size: 1.25rem 1.25rem;
+}
+@utility form-checkbox {
+    @apply h-4 w-4 rounded border-slate-300 accent-indigo-600;
+}
+@utility form-help {
+    @apply mt-1 text-xs text-slate-500;
+}
+@utility form-error {
+    @apply mt-1 text-xs font-medium text-red-600;
+}
+
+/* ---------- Surfaces ---------- */
+@utility card {
+    @apply rounded-xl border border-slate-200/80 bg-white;
+    box-shadow:
+        0 1px 2px rgb(15 23 42 / 0.04),
+        0 1px 3px rgb(15 23 42 / 0.03);
+}
+/* Cards that are themselves links/buttons. */
+@utility card-hover {
+    @apply transition duration-200 hover:-translate-y-0.5 hover:border-slate-300;
+    &:hover {
+        box-shadow:
+            0 4px 12px rgb(15 23 42 / 0.06),
+            0 2px 4px rgb(15 23 42 / 0.04);
+    }
+}
+@utility card-header {
+    @apply flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5;
+}
+@utility card-title {
+    @apply text-[0.9375rem] font-semibold tracking-tight text-slate-900;
+}
+/* Small uppercase label above a group of content. */
+@utility eyebrow {
+    @apply text-[11px] font-semibold tracking-wider text-slate-400 uppercase;
+}
+/* Big number in a metric tile. */
+@utility metric {
+    @apply text-3xl font-semibold tracking-tight text-slate-900 tabular-nums;
+}
+/* Toolbar row above a list: filters, search, view switches. */
+@utility toolbar {
+    @apply flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center;
+}
+@utility card-body {
+    @apply p-5;
+}
+
+/* ---------- Misc ---------- */
+@utility link {
+    @apply font-medium text-indigo-600 hover:text-indigo-700 hover:underline;
+}
+@utility chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+}
+@utility nav-link {
+    @apply relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-400 transition hover:bg-white/5 hover:text-white;
+}
+@utility nav-link-active {
+    @apply bg-white/10 text-white;
+    &::before {
+        content: '';
+        @apply absolute top-1/2 -left-3 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-indigo-400;
+    }
+}
+
+/* ---------- Tables ---------- */
+@layer components {
+    .table {
+        @apply min-w-full divide-y divide-slate-200 text-sm;
+    }
+    .table th {
+        @apply bg-slate-50 px-4 py-2.5 text-left text-xs font-semibold tracking-wide text-slate-500 uppercase;
+    }
+    .table td {
+        @apply px-4 py-3 align-middle text-slate-700;
+    }
+    .table tbody tr {
+        @apply border-b border-slate-100 last:border-0 hover:bg-slate-50;
+    }
+}
+
+input[type='range'].progress-range {
+    accent-color: var(--color-indigo-600);
+}
+
+/* Modal / dropdown entrance, replacing Alpine's x-transition. */
+@keyframes taskflow-fade-in {
+    from {
+        opacity: 0;
+    }
+}
+@keyframes taskflow-pop-in {
+    from {
+        opacity: 0;
+        transform: translateY(1rem) scale(0.98);
+    }
+}
+.animate-fade-in {
+    animation: taskflow-fade-in 150ms ease-out;
+}
+.animate-pop-in {
+    animation: taskflow-pop-in 200ms ease-out;
+}

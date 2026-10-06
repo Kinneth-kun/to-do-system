@@ -1,24 +1,30 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+*.tsbuildinfo
+
+# local database + uploads (embedded Postgres used when DATABASE_URL is unset)
+/.data/
+
+# env files — never commit real credentials
+.env
+.env*.local
+.env.production
+.env.backup
+
+# vercel
+/.vercel
+
+# misc
 *.log
 .DS_Store
-.env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
-/vendor
-Homestead.json
-Homestead.yaml
 Thumbs.db
+/.idea
+/.vscode
+/.fleet
+/.zed
+/coverage
