@@ -1,13 +1,39 @@
 'use client';
 
-import { Department } from '@/lib/enums';
+import { useState } from 'react';
+import { Department, ROLE_ADMIN } from '@/lib/enums';
 import type { FormState } from '@/lib/validation';
 import { Icon } from '../icon';
-import { ActionForm, FormError, Input, Select, SubmitButton } from '../client/form';
+import { ActionForm, FormError, Input, Select, SubmitButton, useOld } from '../client/form';
 
 type UserDefaults = { name: string; username: string; email: string; roleId: number; jobTitle: string | null; department: string | null };
 
-export function UserForm({ action, roles, user }: { action: (state: FormState, formData: FormData) => Promise<FormState>; roles: { id: number; label: string }[]; user?: UserDefaults }) {
+type RoleOption = { id: number; name: string; label: string };
+
+/** Role, then job title and department — which administrators don't have. */
+function RoleFields({ roles, user }: { roles: RoleOption[]; user?: UserDefaults }) {
+    const initial = useOld('role_id', String(user?.roleId ?? roles.find((r) => r.name === 'user')?.id ?? '')) as string;
+    const [roleId, setRoleId] = useState(initial);
+    const isAdmin = roles.find((r) => String(r.id) === roleId)?.name === ROLE_ADMIN;
+    return (
+        <>
+            <Select name="role_id" label="Role" options={roles.map((r) => ({ value: r.id, label: r.label }))} defaultValue={initial} onChange={(e) => setRoleId(e.target.value)} required />
+            {isAdmin ? (
+                <p className="flex items-start gap-2 self-end rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-relaxed text-slate-500 sm:col-span-2">
+                    <Icon name="info" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    Administrators don&apos;t belong to a department and have no job title.
+                </p>
+            ) : (
+                <>
+                    <Input name="job_title" label="Job title" defaultValue={user?.jobTitle ?? ''} />
+                    <Select name="department" label="Department" options={Department.options()} defaultValue={user?.department ?? ''} placeholder="Select a department" required help="Used to identify this person's tasks." />
+                </>
+            )}
+        </>
+    );
+}
+
+export function UserForm({ action, roles, user }: { action: (state: FormState, formData: FormData) => Promise<FormState>; roles: RoleOption[]; user?: UserDefaults }) {
     return (
         <ActionForm action={action} className="card">
             <div className="card-body space-y-5">
@@ -16,9 +42,7 @@ export function UserForm({ action, roles, user }: { action: (state: FormState, f
                     <Input name="name" label="Full name" defaultValue={user?.name} required autoComplete="name" />
                     <Input name="username" label="Username" defaultValue={user?.username} required autoComplete="username" />
                     <Input name="email" type="email" label="Email address" defaultValue={user?.email} required autoComplete="email" />
-                    <Select name="role_id" label="Role" options={roles.map((r) => ({ value: r.id, label: r.label }))} defaultValue={user?.roleId ?? roles.find((r) => r.label === 'User')?.id} required />
-                    <Input name="job_title" label="Job title" defaultValue={user?.jobTitle ?? ''} />
-                    <Select name="department" label="Department" options={Department.options()} defaultValue={user?.department ?? ''} placeholder="Select a department" required help="Used to identify this person's tasks." />
+                    <RoleFields roles={roles} user={user} />
                 </div>
                 {!user && (
                     <div className="grid gap-5 border-t border-slate-100 pt-5 sm:grid-cols-2">

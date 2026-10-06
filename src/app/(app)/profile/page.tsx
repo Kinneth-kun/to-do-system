@@ -16,8 +16,14 @@ export default async function ProfilePage() {
         ['Full name', user.name],
         ['Username', user.username],
         ['Email address', user.email],
-        ['Job title', user.jobTitle || '—'],
-        ['Department', Department.is(user.department) ? Department.label(user.department) : '—'],
+        // Administrators have no job title or department.
+        ...(user.isAdmin
+            ? []
+            : ([
+                  ['Job title', user.jobTitle || '—'],
+                  ['Department', Department.is(user.department) ? Department.label(user.department) : '—'],
+              ] as [string, string][])),
+        ['Role', user.isAdmin ? 'Administrator' : user.role === 'executive' ? 'Executive' : 'User'],
     ];
 
     return (

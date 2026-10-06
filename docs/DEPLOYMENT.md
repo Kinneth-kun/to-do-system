@@ -55,7 +55,6 @@ Project → Settings → **Environment Variables**:
 | `ADMIN_NAME` | Your name |
 | `ADMIN_EMAIL` | Your email — the administrator account is created or updated on every deploy |
 | `ADMIN_USERNAME` | Your username |
-| `ADMIN_DEPARTMENT` | e.g. `information_technology` |
 | `ADMIN_PASSWORD` | A strong password. Only written when set — remove it after the first deploy if you'd rather change it in the app |
 | `CRON_SECRET` | A long random string (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Vercel sends it to the cron endpoints; without it they refuse to run in production |
 | `BLOB_ACCESS` | `private` (match the store) |

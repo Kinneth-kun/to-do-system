@@ -35,21 +35,22 @@ async function adminCount(onlyActive = false): Promise<number> {
     return Number(row.c);
 }
 
+/** Administrators don't belong to a department and have no job title; everyone else needs a department. */
 async function validateUser(v: Validator, ignoreId?: number) {
+    const roleId = v.int('role_id', { required: true, label: 'role' });
+    const [chosenRole] = roleId ? await db().select({ name: schema.roles.name }).from(schema.roles).where(eq(schema.roles.id, roleId)) : [];
+    const isAdminRole = chosenRole?.name === ROLE_ADMIN;
     const data = {
         name: v.string('name', { required: true, max: 255 }),
         username: v.string('username', { required: true, max: 50, regex: /^[A-Za-z0-9._-]+$/ }),
         email: v.string('email', { required: true, max: 255, email: true }),
-        jobTitle: v.string('job_title', { max: 255 }),
-        department: v.oneOf('department', Department.values, { required: true }),
-        roleId: v.int('role_id', { required: true, label: 'role' }),
+        jobTitle: isAdminRole ? null : v.string('job_title', { max: 255 }),
+        department: isAdminRole ? null : v.oneOf('department', Department.values, { required: true }),
+        roleId,
     };
     if (data.username && (await usernameTaken(data.username, ignoreId))) v.fail('username', 'The username has already been taken.');
     if (data.email && (await emailTaken(data.email, ignoreId))) v.fail('email', 'The email has already been taken.');
-    if (data.roleId) {
-        const [role] = await db().select({ id: schema.roles.id }).from(schema.roles).where(eq(schema.roles.id, data.roleId));
-        if (!role) v.fail('role_id', 'The selected role is invalid.');
-    }
+    if (data.roleId && !chosenRole) v.fail('role_id', 'The selected role is invalid.');
     return data;
 }
 

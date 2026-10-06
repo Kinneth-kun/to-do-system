@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: 'Add user' };
 
 export default async function NewUserPage() {
     await requireAdmin();
-    const roles = await db().select({ id: schema.roles.id, label: schema.roles.label }).from(schema.roles).orderBy(asc(schema.roles.label));
+    const roles = await db().select({ id: schema.roles.id, name: schema.roles.name, label: schema.roles.label }).from(schema.roles).orderBy(asc(schema.roles.label));
 
     return (
         <>

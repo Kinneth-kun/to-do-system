@@ -15,7 +15,7 @@ export default async function EditUserPage({ params }: { params: Promise<{ id: s
     const id = Number((await params).id);
     const [user] = Number.isInteger(id) ? await db().select().from(schema.users).where(eq(schema.users.id, id)) : [];
     if (!user) notFound();
-    const roles = await db().select({ id: schema.roles.id, label: schema.roles.label }).from(schema.roles).orderBy(asc(schema.roles.label));
+    const roles = await db().select({ id: schema.roles.id, name: schema.roles.name, label: schema.roles.label }).from(schema.roles).orderBy(asc(schema.roles.label));
 
     return (
         <>

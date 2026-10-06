@@ -150,7 +150,7 @@ export type Department = (typeof Department.values)[number];
 
 /**
  * Best-effort mapping of free-text department names onto the official list
- * (used when importing users and for ADMIN_DEPARTMENT).
+ * (used when importing users).
  */
 export function departmentFromLabel(value: string | null | undefined): Department | null {
     if (!value || !value.trim()) return null;

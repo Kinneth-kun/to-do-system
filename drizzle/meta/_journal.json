@@ -43,6 +43,13 @@
       "when": 1791266992383,
       "tag": "0005_project_suggestions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791267830518,
+      "tag": "0006_admins_have_no_department",
+      "breakpoints": true
     }
   ]
 }

@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Suspense, useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { logoutAction } from '@/app/actions/auth';
 import { Icon } from '../icon';
 import { Avatar, cx } from '../ui';
 import { Dropdown } from '../client/dropdown';
 import { openModal } from '../client/modal';
 import { NotificationBell } from './notification-bell';
-import { SearchBar } from './search-bar';
 
 type ShellUser = { name: string; username: string; jobTitle: string | null; avatarColor: string; isAdmin: boolean; fullAccess: boolean; role: string };
 type NavItem = { label: string; href: string; icon: string; match: (path: string) => boolean; badge?: number };
@@ -20,15 +19,12 @@ export function AppShell({ appName, user, unread, children }: { appName: string;
 
     useEffect(() => setSidebarOpen(false), [pathname]);
 
-    // Keyboard shortcuts: "/" focuses search, "n" opens quick create (outside of form fields).
+    // Keyboard shortcut: "n" opens quick create (outside of form fields).
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
             const target = event.target as HTMLElement;
             if (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable || event.metaKey || event.ctrlKey || event.altKey) return;
-            if (event.key === '/') {
-                event.preventDefault();
-                window.dispatchEvent(new CustomEvent('focus-search'));
-            } else if (event.key === 'n') {
+            if (event.key === 'n') {
                 event.preventDefault();
                 openModal('quick-create');
             }
@@ -120,11 +116,7 @@ export function AppShell({ appName, user, unread, children }: { appName: string;
                             <Icon name="menu" className="h-6 w-6" />
                         </button>
 
-                        <div className="min-w-0 flex-1">
-                            <Suspense fallback={<div className="h-9 max-w-xl rounded-lg bg-slate-100/70" />}>
-                                <SearchBar />
-                            </Suspense>
-                        </div>
+                        <div className="min-w-0 flex-1" />
 
                         <div className="flex items-center gap-1 sm:gap-2">
                             <button
