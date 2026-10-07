@@ -12,7 +12,7 @@ import { ValidationError } from '@/lib/errors';
 import { done, flash } from '@/lib/flash';
 import { loadTaskInfo, Notify } from '@/lib/notifications';
 import { TaskService } from '@/lib/services/tasks';
-import { canBeAssigned, isFullAccessUser } from '@/lib/users';
+import { assignableUsers, canBeAssigned, isFullAccessUser } from '@/lib/users';
 import { ALLOWED_EXTENSIONS, blobEnabled, blobHead, deleteStoredFile, detectType, MAX_ATTACHMENT_BYTES, saveLocal } from '@/lib/storage';
 import { Validator, type FormState } from '@/lib/validation';
 
@@ -61,10 +61,16 @@ export async function createTaskAction(_: FormState, formData: FormData): Promis
     const dueDate = v.date('due_date', { afterOrEqual: 'start_date' });
     const status = v.oneOf('status', TaskStatus.values);
     const progress = v.int('progress', { min: 0, max: 100 });
-    const collaboratorIds = v.ints('collaborator_ids[]');
+    // The assignee and the creator already have the task, so they're never collaborators too.
+    const collaboratorIds = v.ints('collaborator_ids[]').filter((id) => id !== assigneeId && id !== user.id);
 
     if (!standalone && !projectId) v.fail('project_id', 'Please choose a project, or make this a standalone task.');
     if (!(await canBeAssigned(assigneeId, user.id))) v.fail('assignee_id', 'Choose someone from the list.');
+    if (collaboratorIds.length) {
+        // Active regular users only: administrators and executives already see every task.
+        const eligible = new Set((await assignableUsers()).map((u) => u.id));
+        if (collaboratorIds.some((id) => !eligible.has(id))) v.fail('collaborator_ids', 'Choose collaborators from the list.');
+    }
     if (v.fails()) return v.state();
 
     if (!standalone) {

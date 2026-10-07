@@ -29,6 +29,61 @@ type TaskDefaults = {
     dueDate?: string | null;
 };
 
+/**
+ * Pick people to work on the task alongside the assignee. Each pick becomes a removable chip and a
+ * hidden collaborator_ids[] field; the assignee and you are left out (you already have the task).
+ */
+function CollaboratorPicker({ people, assigneeId, currentUserId }: { people: AssigneeOption[]; assigneeId: string; currentUserId: number }) {
+    const error = useFieldError('collaborator_ids');
+    const old = useOld('collaborator_ids[]', [] as string[]);
+    const [picked, setPicked] = useState<number[]>(() => (Array.isArray(old) ? old : [old]).map(Number).filter(Boolean));
+    const eligible = people.filter((p) => p.id !== currentUserId && String(p.id) !== assigneeId);
+    const chosen = eligible.filter((p) => picked.includes(p.id));
+    const available = eligible.filter((p) => !picked.includes(p.id));
+
+    return (
+        <div className="sm:col-span-2">
+            <label htmlFor="collaborator_picker" className="form-label">
+                Collaborators
+            </label>
+            {chosen.length > 0 && (
+                <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Collaborators">
+                    {chosen.map((p) => (
+                        <li key={p.id} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pr-1 pl-3 text-sm text-indigo-700 ring-1 ring-indigo-100 ring-inset">
+                            <input type="hidden" name="collaborator_ids[]" value={p.id} />
+                            {p.name}
+                            <button
+                                type="button"
+                                onClick={() => setPicked(picked.filter((id) => id !== p.id))}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full text-indigo-500 hover:bg-indigo-100 hover:text-indigo-800"
+                                aria-label={`Remove ${p.name}`}
+                            >
+                                <Icon name="x" className="h-3 w-3" stroke={2.5} />
+                            </button>
+                        </li>
+                    ))}
+                </ul>
+            )}
+            <select
+                id="collaborator_picker"
+                className={`form-select ${error ? 'border-red-400' : ''}`}
+                value=""
+                disabled={!available.length}
+                onChange={(e) => e.target.value && setPicked([...picked, Number(e.target.value)])}
+            >
+                <option value="">{available.length ? 'Add a collaborator…' : chosen.length ? 'Everyone is already added' : 'No one else to add'}</option>
+                {available.map((p) => (
+                    <option key={p.id} value={p.id}>
+                        {assigneeLabel(p, currentUserId)}
+                    </option>
+                ))}
+            </select>
+            <p className="form-help">Optional. Collaborators can see and update this task, and are notified when you add them.</p>
+            {error && <p className="form-error">{error}</p>}
+        </div>
+    );
+}
+
 function ProjectField({ projects, selected, onChange }: { projects: ProjectOption[]; selected: string; onChange: (projectId: string) => void }) {
     const error = useFieldError('project_id');
     return (
@@ -83,6 +138,9 @@ export function TaskForm({
     const [projectId, setProjectId] = useState(oldProject);
     const onProjectChange = useCallback((value: string) => setProjectId(value), []);
     const postLaunch = create ? kind === 'project' && !!create.projects.find((p) => String(p.id) === projectId)?.completed : !!defaults.category;
+    // Tracked so the collaborator list can leave out whoever the task is assigned to.
+    const oldAssignee = useOld('assignee_id', String(defaults.assigneeId ?? currentUserId)) as string;
+    const [assigneeId, setAssigneeId] = useState(oldAssignee);
 
     return (
         <ActionForm action={action} className="card">
@@ -119,8 +177,10 @@ export function TaskForm({
                         defaultValue={defaults.assigneeId ?? currentUserId}
                         required
                         help="Defaults to you. Anyone else is notified and can update the task."
+                        onChange={(e) => setAssigneeId(e.target.value)}
                     />
                     <Select name="priority" label="Priority" options={Priority.options()} defaultValue={defaults.priority ?? 'medium'} required />
+                    {create && isStandalone && <CollaboratorPicker people={assignees} assigneeId={assigneeId} currentUserId={currentUserId} />}
                     <Input name="start_date" label="Start date" type="date" defaultValue={defaults.startDate ?? ''} />
                     <div>
                         <Input name="due_date" label="Due date" type="date" defaultValue={defaults.dueDate ?? ''} help="Overdue tasks are marked Delayed automatically." />
