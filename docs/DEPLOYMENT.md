@@ -1,99 +1,111 @@
-# Deploying TaskFlow
+# Deploying TaskFlow to Vercel
 
-Target: **Render**, one web service with a persistent disk. Everything — the app, the SQLite
-database, uploaded attachments and the 08:00 weekday briefing — runs in that one service.
+TaskFlow runs on Vercel as a standard Next.js project. It needs three things Vercel doesn't keep
+for you between requests, each provided by a Vercel-connected service:
 
-The same `Dockerfile` works on Railway, Fly.io or any Docker host; only `render.yaml` is
-Render-specific.
+| Need | Service | Why |
+|---|---|---|
+| Database | **Neon Postgres** (Vercel Marketplace) | Vercel functions have no persistent disk, so SQLite cannot work |
+| File attachments | **Vercel Blob** (private store) | Same reason; uploads go browser → Blob directly, since function request bodies are capped at 4.5 MB |
+| The 08:00 briefing and deadline sweep | **Vercel Cron** | Replaces `php artisan schedule:work` |
 
----
-
-## Why it is shaped this way
-
-- **A disk, not a managed database.** SQLite on a mounted disk keeps the deployment to one paid
-  service and needs no code changes. Switching to Postgres later is env-vars only — `pdo_pgsql`
-  is already in the image.
-- **The scheduler runs inside the web container.** On Render a disk attaches to a *single*
-  service and **cron jobs cannot read it**, so a separate cron service could not reach the
-  database. Supervisor runs Apache and `php artisan schedule:work` side by side.
-- **Two consequences of using a disk:** deploys are not zero-downtime (the old instance stops
-  before the new one starts — a few seconds), and the service cannot scale beyond one instance.
-  Both are fine for an internal tool; neither is fine for hundreds of concurrent users.
+Sessions, login throttling and the "run the deadline check at most every 5 minutes" lock all
+live in Postgres, so any number of function instances can serve requests.
 
 ---
 
-## 1. Push the branch
+## 1. Push the code
 
-The blueprint deploys from GitHub, so merge `feat/taskflow-app` into `main` first (or point
-Render at the branch).
+Commit this branch and push it to GitHub (`Kinneth-kun/to-do-system`). Merge it into `main` if
+that is the branch you want Vercel to deploy to production.
 
-## 2. Create the service
+## 2. Create the Vercel project
 
-1. <https://dashboard.render.com> → **New** → **Blueprint**
-2. Connect `Kinneth-kun/to-do-system` and pick the branch. Render reads `render.yaml`.
-3. It will ask for the values marked `sync: false`. Fill them in:
+1. <https://vercel.com/new> → import the repository.
+2. Framework preset: **Next.js** (detected). Leave the build settings alone — `vercel.json` sets
+   the build command to `npm run vercel-build`, which applies database migrations, creates the
+   administrator, then runs `next build`.
+3. Don't deploy yet — add the database and variables first (or let the first deploy fail and
+   redeploy after step 5).
+
+## 3. Add the database
+
+Project → **Storage** → **Create** → **Neon** (Postgres). Connect it to all environments. This
+sets `DATABASE_URL` automatically.
+
+Choose the region closest to your users and pin the project's **Function Region** to the same one
+(Project → Settings → Functions) — every page makes several queries, so co-locating them matters.
+For Manila, Singapore (`sin1`) is the natural choice.
+
+## 4. Add file storage
+
+Project → **Storage** → **Create** → **Blob**, and pick **private** access. Connect it to the
+project, then make sure the project has a `BLOB_READ_WRITE_TOKEN` environment variable (shown on
+the store's page) — browser uploads need it to request upload tokens.
+
+Without a Blob store, attachment uploads on Vercel will fail; everything else works.
+
+## 5. Environment variables
+
+Project → Settings → **Environment Variables**:
 
 | Variable | Value |
 |---|---|
-| `APP_KEY` | `base64:6RcOzUhUqMGJy7N0bDCm7kErAxYSpJv+l9Fn+qAsZD4=` (generated for you — or run `php artisan key:generate --show`) |
-| `APP_URL` | `https://taskflow-xxxx.onrender.com` — set it after Render shows you the URL, then redeploy |
-| `ADMIN_NAME` | Kinneth Daluag |
-| `ADMIN_EMAIL` | kinnethdaluag.pro@gmail.com |
-| `ADMIN_USERNAME` | kinnethdaluag.pro |
-| `ADMIN_PASSWORD` | the password from your local `.env` — or a new one |
-| `ANTHROPIC_API_KEY` | optional; leave blank for plain-text briefings |
+| `APP_TIMEZONE` | `Asia/Manila` — "today", overdue and due-soon are decided in this zone |
+| `ADMIN_NAME` | Your name |
+| `ADMIN_EMAIL` | Your email — the administrator account is created or updated on every deploy |
+| `ADMIN_USERNAME` | Your username |
+| `ADMIN_PASSWORD` | A strong password. Only written when set — remove it after the first deploy if you'd rather change it in the app |
+| `CRON_SECRET` | A long random string (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Vercel sends it to the cron endpoints; without it they refuse to run in production |
+| `BLOB_ACCESS` | `private` (match the store) |
+| `ANTHROPIC_API_KEY` | Optional — enables Claude-written briefings |
+| `ANTHROPIC_MODEL` | Optional, default `claude-opus-5-5` |
 
-4. **Create**. The first build takes a few minutes (Composer + npm + the PHP image).
+`DATABASE_URL` and `BLOB_READ_WRITE_TOKEN` come from steps 3 and 4.
 
-On boot the container creates the database file if missing, runs `migrate --force`, creates or
-updates the administrator from the `ADMIN_*` variables, caches config/routes/views, then starts
-Apache and the scheduler.
+## 6. Deploy
 
-## 3. Check it
+Deploy (or redeploy). The build log should show `Migrations applied.` and
+`Created administrator …`. Then:
 
-- Open the URL and sign in.
-- `/up` should return 200 (Render's health check uses it).
-- Logs should end with `TaskFlow ready — scheduler and web server starting.`
-- In Render's shell: `php artisan schedule:list` → `0 8 * * 1-5 php artisan taskflow:daily-digest`.
-- Send yourself a briefing without waiting for Monday:
-  `php artisan taskflow:daily-digest --force`
-
----
-
-## What was verified locally, and what was not
-
-| Checked here | How |
-|---|---|
-| App boots, all pages render, 107 tests pass | `php artisan test` |
-| Schedule registered as `0 8 * * 1-5` | `php artisan schedule:list` + a test asserting the expression |
-| Entrypoint script syntax | `bash -n docker/entrypoint.sh` |
-| Config files are valid PHP | `php -l` |
-| **The Docker image builds** | **Not verified — Docker is not installed on this machine.** Render's first build is the real test. |
-
-If the first build fails it will almost certainly be a missing PHP extension or an npm step;
-the build log names it and it is a one-line fix in the `Dockerfile`.
+- Open the deployment URL and sign in.
+- `https://<your-app>/up` returns `{"status":"ok"}` when the database is reachable.
+- Project → **Cron Jobs** lists `/api/cron/daily-digest` and `/api/cron/check-deadlines`. You can
+  run either from there to test it.
 
 ---
 
-## Cost
+## The schedule
 
-Render's Starter instance plus a 1 GB disk is roughly **$7–8/month**. A disk requires a paid
-instance — the free tier has no persistent storage and sleeps when idle, which would both lose
-your data and stop the 08:00 briefing.
+`vercel.json` defines the cron jobs. Vercel cron schedules are always **UTC**:
 
-Cheaper alternatives, if that matters more than simplicity:
+| Job | Schedule (UTC) | Manila time |
+|---|---|---|
+| Daily briefing | `0 0 * * 1-5` | 08:00, Monday–Friday |
+| Deadline sweep | `5 16 * * *` | 00:05 daily |
 
-- **Free Postgres (Neon) + Render free web service** — no disk needed for the database, but
-  attachments still need object storage, and a sleeping free service delays the briefing.
-- **A small VPS** (Hetzner/DigitalOcean, ~$5) — full control, but you maintain the server.
+If your `APP_TIMEZONE` is not Asia/Manila, adjust these hours. The briefing endpoint also skips
+weekends in `APP_TIMEZONE` on its own.
 
----
+Both jobs are scheduled once a day so they work on the Hobby plan. Overdue tasks don't wait for
+the nightly sweep: whenever someone uses the app, the same check runs in the background at most
+once every five minutes. On Pro, you can make the sweep hourly (`0 * * * *`) as the Laravel app
+had it.
 
-## After it is live
+## Preview deployments
 
-1. Set `APP_URL` to the real URL and redeploy — password-reset style links and the notification
-   URLs in the digest are built from it.
-2. Sign in and change the admin password from Profile if you want one you chose.
-3. Watch the first weekday morning: the briefing should appear in the bell by 08:05.
-4. The one thing to keep an eye on is disk usage — attachments and the database share the 1 GB.
-   Render shows disk usage on the service page.
+`vercel-build` migrates whatever database `DATABASE_URL` points at. If previews share the
+production database, a preview build of a branch with a new migration will apply it to
+production. Neon's Vercel integration can give each preview its own database branch — turn that
+on (Storage → your Neon store → settings) before you add migrations on branches.
+
+## Moving data from the Laravel app
+
+The schema keeps the Laravel table and column names, and password hashes from PHP (`$2y$`) are
+accepted as-is, so existing rows can be copied into Postgres table by table. The local SQLite
+database in the old project only held demo data, so this wasn't needed here.
+
+## Costs
+
+The Hobby plan, Neon's free tier and Blob's free allowance cover a small team. AI briefings cost
+roughly a few hundred tokens per person per weekday when `ANTHROPIC_API_KEY` is set.
