@@ -284,7 +284,7 @@ export async function uploadAttachmentAction(taskId: number, _: FormState, formD
     const mimeType = await detectType(bytes.slice(0, 4100), file.name);
     if (!mimeType) return { errors: { file: TYPE_ERROR } };
 
-    const filePath = await saveLocal(taskId, file.name, bytes);
+    const filePath = await saveLocal(`task-${taskId}`, file.name, bytes);
     await recordAttachment(user, taskId, { originalName: file.name.slice(0, 255), path: filePath, disk: 'local', mimeType, size: file.size });
     await done('success', 'Attachment uploaded.');
     return { ok: true };

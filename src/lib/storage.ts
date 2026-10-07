@@ -73,8 +73,9 @@ export async function detectType(head: Uint8Array, originalName: string): Promis
     return ext === 'csv' ? 'text/csv' : 'text/plain';
 }
 
-export async function saveLocal(taskId: number, originalName: string, bytes: Uint8Array): Promise<string> {
-    const relative = path.posix.join('attachments', `task-${taskId}`, `${randomUUID()}-${safeFileName(originalName)}`);
+/** Save under .data/uploads/attachments/<folder>/ (e.g. "task-12", "suggestion-3"). */
+export async function saveLocal(folder: string, originalName: string, bytes: Uint8Array): Promise<string> {
+    const relative = path.posix.join('attachments', folder, `${randomUUID()}-${safeFileName(originalName)}`);
     const absolute = path.join(uploadsRoot(), relative);
     await mkdir(path.dirname(absolute), { recursive: true });
     await writeFile(absolute, bytes);

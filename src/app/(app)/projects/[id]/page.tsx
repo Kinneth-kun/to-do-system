@@ -264,15 +264,6 @@ export default async function ProjectPage({ params }: Props) {
                                         {postLaunch.length ? [`${openPostLaunch} open`, `${postLaunch.length - openPostLaunch} done`, ...byCategory].join(' · ') : 'Post-launch work on the finished project'}
                                     </p>
                                 </div>
-                                {canCreateTask && completed && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {TaskCategory.options().map((o) => (
-                                            <Link key={o.value} className="btn-secondary btn-sm" href={`/tasks/new?project_id=${project.id}&category=${o.value}`}>
-                                                <Icon name="plus" className="h-3.5 w-3.5" stroke={2} /> {o.label}
-                                            </Link>
-                                        ))}
-                                    </div>
-                                )}
                             </div>
                             <div className="divide-y divide-slate-100">
                                 {postLaunch.length ? (

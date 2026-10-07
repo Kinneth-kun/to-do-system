@@ -186,6 +186,10 @@ export default async function TaskPage({ params }: Props) {
                                 <p className="eyebrow mb-3">Post an update</p>
                                 <QuickUpdate taskId={task.id} status={status} progress={task.progress} />
                             </div>
+                        ) : user.fullAccess ? (
+                            <p className="mt-5 flex items-center gap-2 border-t border-slate-100 bg-slate-50/60 px-5 py-3 text-xs text-slate-500">
+                                <Icon name="eye" className="h-4 w-4 shrink-0" /> View only — updates come from the people assigned to this task.
+                            </p>
                         ) : (
                             <div className="h-5" />
                         )}

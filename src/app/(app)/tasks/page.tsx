@@ -28,6 +28,14 @@ const TYPE_OPTIONS: { value: TaskType | ''; label: string }[] = [
     { value: 'standalone', label: 'Standalone tasks' },
 ];
 
+type TaskSort = 'desc' | 'asc' | 'az' | 'za';
+const SORT_OPTIONS: { value: TaskSort; label: string }[] = [
+    { value: 'desc', label: 'Due date: latest first' },
+    { value: 'asc', label: 'Due date: earliest first' },
+    { value: 'az', label: 'Title: A to Z' },
+    { value: 'za', label: 'Title: Z to A' },
+];
+
 export default async function TasksPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
     const user = await requireUser();
     const params = await searchParams;
@@ -36,6 +44,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     const status = TaskStatus.is(param(params.status)) ? (param(params.status) as TaskStatus) : '';
     const department = user.fullAccess && Department.is(param(params.department)) ? param(params.department)! : '';
     const mine = ['1', 'true', 'on'].includes(param(params.mine) ?? '');
+    // ?sort=desc|asc|az|za — order within each group: by due date (latest first by default) or by title.
+    const sort: TaskSort = SORT_OPTIONS.find((o) => o.value === param(params.sort))?.value ?? 'desc';
     // ?project_id=<id>; ?type=project|standalone (?project_id=standalone still means standalone).
     const requestedType = param(params.project_id) === 'standalone' ? 'standalone' : param(params.type);
     const projectId = requestedType !== 'standalone' && /^\d+$/.test(param(params.project_id) ?? '') ? Number(param(params.project_id)) : null;
@@ -80,7 +90,12 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             sql`${tasks.projectId} is null`,
             sql`(select lower(p.name) from projects p where p.id = ${tasks.projectId})`,
             tasks.projectId,
-            sql`${tasks.dueDate} desc nulls last`,
+            ...{
+                desc: [sql`${tasks.dueDate} desc nulls last`],
+                asc: [sql`${tasks.dueDate} asc nulls last`],
+                az: [sql`lower(${tasks.title}) asc`, sql`${tasks.dueDate} asc nulls last`],
+                za: [sql`lower(${tasks.title}) desc`, sql`${tasks.dueDate} asc nulls last`],
+            }[sort],
             desc(tasks.createdAt),
         )
         .limit(PER_PAGE)
@@ -89,7 +104,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
     // A header wherever the group changes (and at the top of every page).
     const groupKey = (t: (typeof taskRows)[number]) => (t.standalone ? 'standalone' : `p${t.project?.id ?? 0}`);
 
-    const active = { q: q || null, status: status || null, type: projectId ? null : type || null, project_id: projectId, mine: mine || null, department: department || null };
+    const active = { q: q || null, status: status || null, type: projectId ? null : type || null, project_id: projectId, mine: mine || null, department: department || null, sort: sort === 'desc' ? null : sort };
     const hasFilters = Object.values(active).some(Boolean);
 
     return (
@@ -156,6 +171,13 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                     {TYPE_OPTIONS.map((o) => (
                         <option key={o.value || 'all'} value={o.value}>
                             {o.label} ({typeCounts[o.value]})
+                        </option>
+                    ))}
+                </AutoSubmitSelect>
+                <AutoSubmitSelect className="form-select sm:w-56" name="sort" defaultValue={sort} aria-label="Sort tasks">
+                    {SORT_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                            {o.label}
                         </option>
                     ))}
                 </AutoSubmitSelect>

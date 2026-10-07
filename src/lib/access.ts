@@ -13,7 +13,8 @@ import { FULL_ACCESS_ROLES, type RoleName } from './enums';
 const { projects, tasks, projectMembers, taskCollaborators } = schema;
 
 /**
- * `fullAccess`: administrators and executives see and manage every project and task.
+ * `fullAccess`: administrators and executives see every project and task and manage every project,
+ * but only change tasks they are personally on (see the task policies below).
  * `department`: regular users only reach their own department's tasks through a project.
  */
 export type Actor = { id: number; fullAccess: boolean; department?: string | null };
@@ -142,18 +143,21 @@ export const can = {
     createTask: (u: Actor, p: ProjectAccess) => can.viewProject(u, p),
     deleteProject: (u: Actor, p: ProjectAccess) => u.fullAccess || p.ownerId === u.id,
 
-    /* Tasks — project roles only reach tasks of the user's own department (see taskVisibleTo). */
+    /*
+     * Tasks — project roles only reach tasks of the user's own department (see taskVisibleTo).
+     * Full access is for viewing: admins and executives see every task, but change only the ones
+     * they are personally on (assignee, creator, collaborator) — other people's tasks are read-only.
+     */
     viewTask: (u: Actor, t: TaskAccess) =>
         u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && sameDepartment(u, t) && can.viewProject(u, t.project)),
     /** Quick update (status / progress / remark). */
     updateTask: (u: Actor, t: TaskAccess) =>
-        u.fullAccess || t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
+        t.assigneeId === u.id || t.createdBy === u.id || t.collaboratorIds.has(u.id) || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
     /** Change details, assignee and dates. */
-    editTask: (u: Actor, t: TaskAccess) =>
-        u.fullAccess || t.createdBy === u.id || t.assigneeId === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
+    editTask: (u: Actor, t: TaskAccess) => t.createdBy === u.id || t.assigneeId === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
     manageCollaborators: (u: Actor, t: TaskAccess) => can.editTask(u, t),
     comment: (u: Actor, t: TaskAccess) => can.viewTask(u, t),
-    deleteTask: (u: Actor, t: TaskAccess) => u.fullAccess || t.createdBy === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
+    deleteTask: (u: Actor, t: TaskAccess) => t.createdBy === u.id || (t.project !== null && sameDepartment(u, t) && isProjectManager(t.project, u.id)),
 };
 
 /** Users @-mentioned can only be notified when they could open the task. */

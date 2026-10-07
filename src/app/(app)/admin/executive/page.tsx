@@ -8,9 +8,13 @@ import { Department, OPEN_STATUSES, ProjectHealth, TaskStatus, taskStatusColor }
 import { ProjectHealthService } from '@/lib/services/health';
 import { Settings } from '@/lib/settings';
 import { isProjectOverdue } from '@/lib/task-utils';
+import { withQuery } from '@/lib/urls';
 import { usersByIds } from '@/lib/users';
+import { buildTaskRows, param } from '@/lib/views';
 import { Icon } from '@/components/icon';
+import { AutoSubmitSelect } from '@/components/client/auto-submit';
 import { ClickableRow } from '@/components/client/clickable-row';
+import { TaskRow } from '@/components/tasks/task-row';
 import { Avatar, cx, DepartmentBadge, EmptyState, HealthBadge, PageHeader, ProgressBar, ProgressRing, StatCard } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Executive Dashboard' };
@@ -19,11 +23,25 @@ const { tasks, projects, users } = schema;
 const liveTask = isNull(tasks.deletedAt);
 const liveProject = isNull(projects.deletedAt);
 
-export default async function ExecutiveDashboardPage() {
+const DEPARTMENT_TASKS = 10;
+
+export default async function ExecutiveDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
     const user = await requireFullAccess();
+    const params = await searchParams;
+
+    // ?department=<value> scopes the whole dashboard to one department: tasks assigned to its
+    // people (as on the task list), and the projects those tasks belong to.
+    const department = Department.is(param(params.department)) ? (param(params.department) as Department) : null;
+    const taskInDepartment = department ? sql`exists (select 1 from users u where u.id = ${tasks.assigneeId} and u.department = ${department})` : undefined;
+    const projectInDepartment = department
+        ? sql`exists (select 1 from tasks t join users u on u.id = t.assignee_id where t.project_id = ${projects.id} and t.deleted_at is null and u.department = ${department})`
+        : undefined;
+    const scopedTask = and(liveTask, taskInDepartment);
+    const scopedProject = and(liveProject, projectInDepartment);
+    const withDepartment = (path: string, query: Record<string, string | null> = {}) => withQuery(path, { ...query, department });
 
     // The eight most recently updated projects, with health recalculated so the table is current.
-    const recent = await db().select({ id: projects.id }).from(projects).where(liveProject).orderBy(desc(projects.updatedAt)).limit(8);
+    const recent = await db().select({ id: projects.id }).from(projects).where(scopedProject).orderBy(desc(projects.updatedAt)).limit(8);
     const portfolio = [];
     for (const { id } of recent) portfolio.push((await ProjectHealthService.refresh(id))!);
     portfolio.sort((a, b) => ProjectHealth.meta[a.health as ProjectHealth].urgency - ProjectHealth.meta[b.health as ProjectHealth].urgency);
@@ -31,20 +49,37 @@ export default async function ExecutiveDashboardPage() {
 
     const single = async (query: Promise<{ c: number }[]>) => Number((await query)[0].c);
     const stats = {
-        users: await single(db().select({ c: count() }).from(users).where(eq(users.isActive, true))),
-        projects: await single(db().select({ c: count() }).from(projects).where(and(liveProject, eq(projects.status, 'active')))),
-        tasks: await single(db().select({ c: count() }).from(tasks).where(liveTask)),
-        completed: await single(db().select({ c: count() }).from(tasks).where(and(liveTask, eq(tasks.status, 'completed')))),
-        delayed: await single(db().select({ c: count() }).from(tasks).where(and(liveTask, eq(tasks.status, 'delayed')))),
+        users: await single(db().select({ c: count() }).from(users).where(and(eq(users.isActive, true), department ? eq(users.department, department) : undefined))),
+        projects: await single(db().select({ c: count() }).from(projects).where(and(scopedProject, eq(projects.status, 'active')))),
+        tasks: await single(db().select({ c: count() }).from(tasks).where(scopedTask)),
+        completed: await single(db().select({ c: count() }).from(tasks).where(and(scopedTask, eq(tasks.status, 'completed')))),
+        delayed: await single(db().select({ c: count() }).from(tasks).where(and(scopedTask, eq(tasks.status, 'delayed')))),
     };
 
-    const statusCounts = new Map((await db().select({ status: tasks.status, c: count() }).from(tasks).where(liveTask).groupBy(tasks.status)).map((r) => [r.status, Number(r.c)]));
+    const statusCounts = new Map((await db().select({ status: tasks.status, c: count() }).from(tasks).where(scopedTask).groupBy(tasks.status)).map((r) => [r.status, Number(r.c)]));
     const taskTotal = Math.max(1, [...statusCounts.values()].reduce((a, b) => a + b, 0));
-    const healthCounts = new Map((await db().select({ health: projects.health, c: count() }).from(projects).where(liveProject).groupBy(projects.health)).map((r) => [r.health, Number(r.c)]));
+    const healthCounts = new Map((await db().select({ health: projects.health, c: count() }).from(projects).where(scopedProject).groupBy(projects.health)).map((r) => [r.health, Number(r.c)]));
     const [{ overall }] = await db()
         .select({ overall: avg(projects.progress) })
         .from(projects)
-        .where(and(liveProject, eq(projects.status, 'active')));
+        .where(and(scopedProject, eq(projects.status, 'active')));
+
+    // The selected department's tasks: delayed first, then work in flight, then the rest; soonest due within each.
+    const departmentTasks = department
+        ? await buildTaskRows(
+              user,
+              await db()
+                  .select()
+                  .from(tasks)
+                  .where(scopedTask)
+                  .orderBy(
+                      sql`case ${tasks.status} when 'delayed' then 0 when 'in_progress' then 1 when 'pending' then 2 when 'on_hold' then 3 when 'completed' then 4 else 5 end`,
+                      sql`${tasks.dueDate} asc nulls last`,
+                      desc(tasks.updatedAt),
+                  )
+                  .limit(DEPARTMENT_TASKS),
+          )
+        : [];
 
     // Work by department: open tasks counted against the department of the person assigned.
     const byDepartment = new Map(
@@ -71,22 +106,34 @@ export default async function ExecutiveDashboardPage() {
         <>
             <PageHeader
                 title="Executive Dashboard"
-                description={`${organization} · ${formatDate(now(), 'l, F j, Y')}`}
+                description={`${organization}${department ? ` · ${Department.label(department)}` : ''} · ${formatDate(now(), 'l, F j, Y')}`}
                 actions={
-                    user.isAdmin && (
-                        <Link href="/admin/meeting" className="btn-primary">
-                            <Icon name="presentation" className="h-4 w-4" /> Meeting mode
-                        </Link>
-                    )
+                    <div className="flex flex-wrap items-center gap-2">
+                        <form method="GET">
+                            <AutoSubmitSelect className="form-select sm:w-56" name="department" defaultValue={department ?? ''} aria-label="Filter by department">
+                                <option value="">All departments</option>
+                                {Department.options().map((o) => (
+                                    <option key={o.value} value={o.value}>
+                                        {o.label}
+                                    </option>
+                                ))}
+                            </AutoSubmitSelect>
+                        </form>
+                        {user.isAdmin && (
+                            <Link href="/admin/meeting" className="btn-primary">
+                                <Icon name="presentation" className="h-4 w-4" /> Meeting mode
+                            </Link>
+                        )}
+                    </div>
                 }
             />
 
             {/* KPI row */}
             <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <StatCard label="Active projects" value={stats.projects} icon="folder" color="indigo" href="/projects?status=active" />
-                <StatCard label="Total tasks" value={stats.tasks} icon="tasks" color="violet" href="/tasks" />
-                <StatCard label="Completed" value={stats.completed} icon="check-circle" color="emerald" href="/tasks?status=completed" />
-                <StatCard label="Delayed" value={stats.delayed} icon="alert" color="red" href="/tasks?status=delayed" />
+                <StatCard label="Total tasks" value={stats.tasks} icon="tasks" color="violet" href={withDepartment('/tasks')} />
+                <StatCard label="Completed" value={stats.completed} icon="check-circle" color="emerald" href={withDepartment('/tasks', { status: 'completed' })} />
+                <StatCard label="Delayed" value={stats.delayed} icon="alert" color="red" href={withDepartment('/tasks', { status: 'delayed' })} />
                 <StatCard label="Active people" value={stats.users} icon="users" color="sky" href={user.isAdmin ? '/admin/users' : undefined} />
             </div>
 
@@ -147,14 +194,30 @@ export default async function ExecutiveDashboardPage() {
                 <div className="card-header">
                     <div>
                         <h2 className="card-title">Work by department</h2>
-                        <p className="mt-0.5 text-xs text-slate-500">Open tasks counted against the department of the person assigned.</p>
+                        <p className="mt-0.5 text-xs text-slate-500">Open tasks counted against the department of the person assigned. Pick one to filter the dashboard.</p>
                     </div>
+                    {department && (
+                        <Link href="/admin/executive" className="link text-sm">
+                            Show all
+                        </Link>
+                    )}
                 </div>
                 <div className="divide-y divide-slate-100">
                     {Department.values.map((dept) => {
                         const row = byDepartment.get(dept) ?? { people: 0, open: 0, delayed: 0, completed: 0 };
+                        const selected = dept === department;
                         return (
-                            <Link key={dept} href={`/tasks?department=${dept}`} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition hover:bg-slate-50">
+                            <Link
+                                key={dept}
+                                href={selected ? '/admin/executive' : withQuery('/admin/executive', { department: dept })}
+                                scroll={false}
+                                aria-current={selected ? 'true' : undefined}
+                                className={cx(
+                                    'flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 transition',
+                                    selected ? 'bg-indigo-50/60 shadow-[inset_3px_0_0_var(--color-indigo-500)]' : 'hover:bg-slate-50',
+                                    department && !selected && 'opacity-60 hover:opacity-100',
+                                )}
+                            >
                                 <span className="w-full sm:w-52">
                                     <DepartmentBadge department={dept} />
                                 </span>
@@ -179,6 +242,30 @@ export default async function ExecutiveDashboardPage() {
                 </div>
             </section>
 
+            {/* The selected department's tasks */}
+            {department && (
+                <section className="card mb-6">
+                    <div className="card-header">
+                        <div className="flex min-w-0 items-center gap-2">
+                            <h2 className="card-title">Tasks</h2>
+                            <DepartmentBadge department={department} size="sm" />
+                        </div>
+                        <Link className="link text-sm" href={withDepartment('/tasks')}>
+                            {stats.tasks > DEPARTMENT_TASKS ? `View all ${stats.tasks}` : 'Open in task list'}
+                        </Link>
+                    </div>
+                    {departmentTasks.length ? (
+                        <div className="divide-y divide-slate-100">
+                            {departmentTasks.map((task) => (
+                                <TaskRow key={task.id} task={task} />
+                            ))}
+                        </div>
+                    ) : (
+                        <EmptyState icon="tasks" title="No tasks yet" description={`Nobody in ${Department.label(department)} has been assigned a task.`} />
+                    )}
+                </section>
+            )}
+
             {/* Portfolio table */}
             <section className="card overflow-hidden">
                 <div className="card-header">
@@ -188,7 +275,11 @@ export default async function ExecutiveDashboardPage() {
                     </Link>
                 </div>
                 {portfolio.length === 0 ? (
-                    <EmptyState icon="folder" title="No projects yet" description="Delivery health will appear here once projects exist." />
+                    <EmptyState
+                        icon="folder"
+                        title={department ? 'No projects for this department' : 'No projects yet'}
+                        description={department ? `No project has tasks assigned to ${Department.label(department)}.` : 'Delivery health will appear here once projects exist.'}
+                    />
                 ) : (
                     <>
                         <div className="hidden overflow-x-auto md:block">

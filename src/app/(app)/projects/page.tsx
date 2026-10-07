@@ -7,6 +7,7 @@ import { db, schema } from '@/lib/db';
 import { diffForHumans, formatDate, today } from '@/lib/dates';
 import { ProjectStatus } from '@/lib/enums';
 import { contains } from '@/lib/search';
+import { blobAccess, blobEnabled, humanSize } from '@/lib/storage';
 import { isProjectOverdue } from '@/lib/task-utils';
 import { withQuery } from '@/lib/urls';
 import { userLiteColumns, usersByIds, type UserLite } from '@/lib/users';
@@ -77,6 +78,21 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
             .where(inArray(schema.projectSuggestions.projectId, ids))
             .orderBy(desc(schema.projectSuggestions.createdAt), desc(schema.projectSuggestions.id));
         const authors = await usersByIds(suggestionRows.map((r) => r.userId).filter((id): id is number => id !== null));
+        // Reference files (images, documents) attached to those suggestions, oldest first.
+        const fileRows = suggestionRows.length
+            ? await db()
+                  .select()
+                  .from(schema.attachments)
+                  .where(and(eq(schema.attachments.attachableType, 'project_suggestion'), inArray(schema.attachments.attachableId, suggestionRows.map((r) => r.id))))
+                  .orderBy(schema.attachments.id)
+            : [];
+        const files = new Map<number, SuggestionItem['files']>();
+        for (const f of fileRows) {
+            files.set(f.attachableId, [
+                ...(files.get(f.attachableId) ?? []),
+                { id: f.id, name: f.originalName, size: humanSize(f.size), image: (f.mimeType ?? '').startsWith('image/') },
+            ]);
+        }
         const access = await loadProjectAccess(ids);
         for (const r of suggestionRows) {
             const list = suggestions.get(r.projectId) ?? [];
@@ -89,6 +105,7 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                 author: r.userId ? (authors.get(r.userId) ?? null) : null,
                 when: diffForHumans(r.createdAt),
                 whenTitle: formatDate(r.createdAt, 'M j, Y g:i A'),
+                files: files.get(r.id) ?? [],
                 canDelete: r.userId === user.id || (!!projectAccess && can.updateProject(user, projectAccess)),
             });
             suggestions.set(r.projectId, list);
@@ -191,7 +208,13 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
                                         )}
                                     </div>
                                 </Link>
-                                <SuggestionStrip projectId={project.id} suggestions={suggestions.get(project.id) ?? []} total={suggestionTotals.get(project.id) ?? 0} />
+                                <SuggestionStrip
+                                    projectId={project.id}
+                                    suggestions={suggestions.get(project.id) ?? []}
+                                    total={suggestionTotals.get(project.id) ?? 0}
+                                    blob={blobEnabled()}
+                                    access={blobAccess()}
+                                />
                             </div>
                         );
                     })}
