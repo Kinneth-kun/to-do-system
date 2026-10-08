@@ -4,19 +4,31 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/auth/session';
 import { db, schema } from '@/lib/db';
 import { formatDate, now, today } from '@/lib/dates';
-import { OPEN_STATUSES, ProjectHealth, type TaskStatus, taskStatusColor } from '@/lib/enums';
+import { Department, OPEN_STATUSES, ProjectHealth, type TaskStatus, taskStatusColor } from '@/lib/enums';
 import { Settings } from '@/lib/settings';
 import { dueLabel, isDueSoon, isOverdue } from '@/lib/task-utils';
+import { withQuery } from '@/lib/urls';
 import { usersByIds } from '@/lib/users';
+import { param } from '@/lib/views';
 import { Icon } from '@/components/icon';
 import { FullscreenButton } from '@/components/client/fullscreen-button';
 
 export const metadata: Metadata = { title: 'Meeting Mode' };
 
-/** Presentation view for review meetings: no sidebar, large type, dark background. */
-export default async function MeetingPage() {
+/**
+ * Presentation view for review meetings: no sidebar, large type, dark background.
+ * ?department=<value> narrows the review to one department, so each team can be walked through in
+ * turn: tasks assigned to its people, and the active projects those tasks belong to.
+ */
+export default async function MeetingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
     // Administrators only — executives have the dashboard but not Meeting Mode.
     await requireAdmin();
+    const params = await searchParams;
+    const department = Department.is(param(params.department)) ? (param(params.department) as Department) : null;
+    const taskInDepartment = department ? sql`exists (select 1 from users u where u.id = ${schema.tasks.assigneeId} and u.department = ${department})` : undefined;
+    const projectInDepartment = department
+        ? sql`exists (select 1 from tasks t join users u on u.id = t.assignee_id where t.project_id = ${schema.projects.id} and t.deleted_at is null and u.department = ${department})`
+        : undefined;
 
     const organization = await Settings.string('general.organization');
     const dueSoonDays = await Settings.int('deadline.due_soon_days');
@@ -25,14 +37,14 @@ export default async function MeetingPage() {
     const projects = await db()
         .select()
         .from(schema.projects)
-        .where(and(isNull(schema.projects.deletedAt), eq(schema.projects.status, 'active')))
+        .where(and(isNull(schema.projects.deletedAt), eq(schema.projects.status, 'active'), projectInDepartment))
         .orderBy(asc(schema.projects.dueDate));
     const tasks = await db()
         .select({ task: schema.tasks, projectName: schema.projects.name })
         .from(schema.tasks)
         // Standalone tasks (no project) are part of the portfolio's open work too.
         .leftJoin(schema.projects, eq(schema.projects.id, schema.tasks.projectId))
-        .where(and(isNull(schema.tasks.deletedAt), isNull(schema.projects.deletedAt), inArray(schema.tasks.status, OPEN_STATUSES)))
+        .where(and(isNull(schema.tasks.deletedAt), isNull(schema.projects.deletedAt), inArray(schema.tasks.status, OPEN_STATUSES), taskInDepartment))
         .orderBy(sql`${schema.tasks.dueDate} is null`, asc(schema.tasks.dueDate))
         .limit(25);
     const people = await usersByIds([...projects.map((p) => p.ownerId), ...tasks.map((t) => t.task.assigneeId).filter((id): id is number => !!id)]);
@@ -40,6 +52,23 @@ export default async function MeetingPage() {
     const needsAttention = tasks.filter(({ task }) => task.status === 'delayed' || isOverdue(task, day) || isDueSoon(task, day, dueSoonDays));
     const attentionIds = new Set(needsAttention.map(({ task }) => task.id));
     const upcoming = tasks.filter(({ task }) => !attentionIds.has(task.id)).slice(0, 8);
+
+    // Open tasks per department (by assignee), for the filter tabs.
+    const openByDepartment = new Map(
+        (
+            await db()
+                .select({ department: schema.users.department, open: sql<number>`count(*)::int` })
+                .from(schema.tasks)
+                .innerJoin(schema.users, eq(schema.users.id, schema.tasks.assigneeId))
+                .leftJoin(schema.projects, eq(schema.projects.id, schema.tasks.projectId))
+                .where(and(isNull(schema.tasks.deletedAt), isNull(schema.projects.deletedAt), inArray(schema.tasks.status, OPEN_STATUSES)))
+                .groupBy(schema.users.department)
+        ).map((r) => [r.department, Number(r.open)]),
+    );
+    const openTotal = [...openByDepartment.values()].reduce((a, b) => a + b, 0);
+    const tab = (on: boolean) =>
+        `inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium whitespace-nowrap transition ${on ? 'bg-white text-slate-900' : 'border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'}`;
+    const count = (on: boolean) => `rounded-full px-1.5 text-xs tabular-nums ${on ? 'bg-slate-900/10 text-slate-700' : 'bg-white/10 text-slate-400'}`;
 
     return (
         <div className="min-h-screen bg-slate-950 text-white">
@@ -51,17 +80,35 @@ export default async function MeetingPage() {
                         </span>
                         <div>
                             <p className="text-xs font-medium tracking-wide text-indigo-300 uppercase">{organization}</p>
-                            <h1 className="text-lg font-semibold tracking-tight">Project review</h1>
+                            <h1 className="text-lg font-semibold tracking-tight">Project review{department && <span className="text-slate-400"> · {Department.label(department)}</span>}</h1>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
                         <span className="hidden text-sm text-slate-400 sm:inline">{formatDate(now(), 'l, F j, Y')}</span>
                         <FullscreenButton />
-                        <Link href="/admin/executive" className="btn btn-sm border border-white/15 text-slate-200 hover:bg-white/10">
+                        <Link href={withQuery('/admin/executive', { department })} className="btn btn-sm border border-white/15 text-slate-200 hover:bg-white/10">
                             Exit
                         </Link>
                     </div>
                 </div>
+                {/* Department filter: walk the meeting through one team at a time. */}
+                <nav aria-label="Filter by department" className="mx-auto max-w-[110rem] overflow-x-auto px-6 pb-3 sm:px-10">
+                    <div className="flex min-w-max items-center gap-2">
+                        <Link href="/admin/meeting" scroll={false} className={tab(!department)} aria-current={!department ? 'page' : undefined}>
+                            All departments <span className={count(!department)}>{openTotal}</span>
+                        </Link>
+                        {Department.values.map((d) => {
+                            const on = d === department;
+                            return (
+                                <Link key={d} href={withQuery('/admin/meeting', { department: d })} scroll={false} className={tab(on)} aria-current={on ? 'page' : undefined}>
+                                    <span className={`h-2 w-2 rounded-full bg-${Department.meta[d].color}-400`} />
+                                    {Department.label(d)}
+                                    <span className={count(on)}>{openByDepartment.get(d) ?? 0}</span>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                </nav>
             </header>
 
             <main className="mx-auto max-w-[110rem] space-y-12 px-6 py-10 sm:px-10">
@@ -100,7 +147,7 @@ export default async function MeetingPage() {
                                 );
                             })
                         ) : (
-                            <p className="text-slate-400">No active projects.</p>
+                            <p className="text-slate-400">{department ? `No active projects with ${Department.label(department)} work.` : 'No active projects.'}</p>
                         )}
                     </div>
                 </section>
@@ -118,7 +165,7 @@ export default async function MeetingPage() {
                         <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-8 text-center">
                             <Icon name="check-circle" className="mx-auto h-8 w-8 text-emerald-400" />
                             <p className="mt-3 text-lg font-medium text-emerald-200">Nothing needs attention</p>
-                            <p className="mt-1 text-sm text-slate-400">No delayed or imminent work across the portfolio.</p>
+                            <p className="mt-1 text-sm text-slate-400">{department ? `No delayed or imminent work in ${Department.label(department)}.` : 'No delayed or imminent work across the portfolio.'}</p>
                         </div>
                     ) : (
                         <div className="grid gap-3 lg:grid-cols-2">

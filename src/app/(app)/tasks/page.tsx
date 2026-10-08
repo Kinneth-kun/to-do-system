@@ -136,16 +136,17 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                 </div>
             </div>
 
-            <form method="GET" className="toolbar mb-6">
+            {/* One row on wide screens (2xl: the page is at its full width); wraps below that. */}
+            <form method="GET" className="toolbar mb-6 2xl:flex-nowrap 2xl:gap-2">
                 <input type="hidden" name="status" value={status} />
-                <div className="relative min-w-0 flex-1 sm:min-w-56 sm:max-w-xs">
+                <div className="relative min-w-0 flex-1 sm:min-w-56 sm:max-w-xs 2xl:min-w-40 2xl:max-w-none">
                     <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     {/* Press Enter to search; the other filters apply as soon as they change. */}
                     <input type="search" className="form-input pl-9" name="q" defaultValue={q} placeholder="Search tasks" aria-label="Search tasks" enterKeyHint="search" />
                 </div>
                 {/* Regular users only see their own department's tasks (plus collaborations). */}
                 {user.fullAccess && (
-                    <AutoSubmitSelect className="form-select sm:w-56" name="department" defaultValue={department} aria-label="Filter by department">
+                    <AutoSubmitSelect className="form-select sm:w-56 2xl:w-44 2xl:shrink-0" name="department" defaultValue={department} aria-label="Filter by department">
                         <option value="">All departments</option>
                         {Department.options().map((o) => (
                             <option key={o.value} value={o.value}>
@@ -154,7 +155,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                         ))}
                     </AutoSubmitSelect>
                 )}
-                <AutoSubmitSelect className="form-select sm:w-52" name="project_id" defaultValue={projectId ?? ''} aria-label="Filter by project">
+                <AutoSubmitSelect className="form-select sm:w-52 2xl:w-40 2xl:shrink-0" name="project_id" defaultValue={projectId ?? ''} aria-label="Filter by project">
                     <option value="">All projects</option>
                     {projects.map((p) => (
                         <option key={p.id} value={p.id}>
@@ -162,26 +163,26 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
                         </option>
                     ))}
                 </AutoSubmitSelect>
-                <label className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
+                <label className="inline-flex shrink-0 items-center gap-2 rounded-lg whitespace-nowrap border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 shadow-sm">
                     <AutoSubmitSelect as="checkbox" name="mine" value="1" defaultChecked={mine} className="form-checkbox" />
                     Only mine
                 </label>
                 {/* Project tasks vs standalone tasks, with how many of each match the other filters. */}
-                <AutoSubmitSelect className="form-select sm:w-52" name="type" defaultValue={type} aria-label="Project or standalone tasks">
+                <AutoSubmitSelect className="form-select sm:w-52 2xl:w-48 2xl:shrink-0" name="type" defaultValue={type} aria-label="Project or standalone tasks">
                     {TYPE_OPTIONS.map((o) => (
                         <option key={o.value || 'all'} value={o.value}>
                             {o.label} ({typeCounts[o.value]})
                         </option>
                     ))}
                 </AutoSubmitSelect>
-                <AutoSubmitSelect className="form-select sm:w-56" name="sort" defaultValue={sort} aria-label="Sort tasks">
+                <AutoSubmitSelect className="form-select sm:w-56 2xl:w-52 2xl:shrink-0" name="sort" defaultValue={sort} aria-label="Sort tasks">
                     {SORT_OPTIONS.map((o) => (
                         <option key={o.value} value={o.value}>
                             {o.label}
                         </option>
                     ))}
                 </AutoSubmitSelect>
-                <Link href="/tasks/new" className="btn-primary sm:ml-auto">
+                <Link href="/tasks/new" className="btn-primary shrink-0 whitespace-nowrap sm:ml-auto">
                     <Icon name="plus" className="h-4 w-4" stroke={2} /> New task
                 </Link>
             </form>

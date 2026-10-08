@@ -120,7 +120,7 @@ export default async function ExecutiveDashboardPage({ searchParams }: { searchP
                             </AutoSubmitSelect>
                         </form>
                         {user.isAdmin && (
-                            <Link href="/admin/meeting" className="btn-primary">
+                            <Link href={withQuery('/admin/meeting', { department })} className="btn-primary">
                                 <Icon name="presentation" className="h-4 w-4" /> Meeting mode
                             </Link>
                         )}
